@@ -2,7 +2,10 @@
 
 #include <memory>
 #include <resource/ResourceManager.h>
+
 #include <platform/Filesystem.h>
+#include <math/Vector.h>
+#include "handy/StringId.h"
 
 #include <AL/al.h>
 #include <AL/alc.h>
@@ -14,11 +17,11 @@
 #include <vector>
 
 namespace ad {
-namespace grapito {
+namespace sounds {
 
 struct OggSoundData
 {
-    StringId soundId;
+    handy::StringId soundId;
     std::vector<ALuint> buffers;
     int channels;
     long sampleRate;
@@ -26,14 +29,14 @@ struct OggSoundData
     std::uint8_t bitsPerSample;
     OggVorbis_File oggFile;
     bool streamedData = false;
-    Position3 position = Position3::Zero();
-    Vec3 velocity = Vec3::Zero();
+    math::Position<3, float> position = math::Position<3, float>::Zero();
+    math::Vec<3, float> velocity = math::Vec<3, float>::Zero();
     float gain = 1.f;
 };
 
 //Should always return by value
 OggSoundData loadOggFileFromPath(const filesystem::path & path, bool streamed);
-OggSoundData loadOggFile(std::istream & aInputStream, StringId aSoundId, bool streamed);
+OggSoundData loadOggFile(std::istream & aInputStream, handy::StringId aSoundId, bool streamed);
 
 //There is three step to play sound
 //First load the file into RAM
@@ -45,12 +48,14 @@ class SoundManager
         SoundManager();
         ~SoundManager();
         void storeDataInLoadedSound(const OggSoundData & aSoundData);
-        ALuint playSound(StringId & aSoundId, ALboolean looping = AL_FALSE);
+        ALuint playSound(handy::StringId & aSoundId, ALboolean looping = AL_FALSE);
         bool stopSound(ALuint aSource);
         bool pauseSound(ALuint aSource);
+        ALint getSourceState(ALuint aSource);
+        void deleteSources(std::vector<ALuint> aSourcesToDelete);
 
     private:
-        std::unordered_map<StringId, OggSoundData> mLoadedSoundList;
+        std::unordered_map<handy::StringId, OggSoundData> mLoadedSoundList;
         ALCdevice * mOpenALDevice;
         ALCcontext * mOpenALContext;
         ALCboolean mContextIsCurrent;

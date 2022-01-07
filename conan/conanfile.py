@@ -32,7 +32,7 @@ class SoundsConan(ConanFile):
     )
 
     build_policy = "missing"
-    generators = "cmake_paths", "cmake_find_package", "CMakeToolchain"
+    generators = "cmake_paths", "cmake_find_package_multi", "CMakeToolchain"
 
     scm = {
         "type": "git",

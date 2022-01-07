@@ -28,14 +28,21 @@ cmc_target_current_include_directory(${TARGET_NAME})
 ## Dependencies
 ##
 
-cmc_find_dependencies(FILE CMakeFinds.cmake.in)
+find_package(Graphics CONFIG REQUIRED COMPONENTS arte graphics resource)
+find_package(Math CONFIG REQUIRED COMPONENTS math)
+
+find_package(spdlog REQUIRED COMPONENTS spdlog)
+find_package(OpenAL REQUIRED CONFIG)
+find_package(Vorbis REQUIRED File CONFIG)
+find_package(Ogg REQUIRED CONFIG)
 
 target_link_libraries(${TARGET_NAME}
     PUBLIC
         ad::math
-        ad::handy
+        ad::graphics
         ad::resource
 
+        spdlog::spdlog
         OpenAL::OpenAL
         Vorbis::vorbisfile
 )

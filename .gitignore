@@ -1,0 +1,44 @@
+# common #
+*.*~
+
+# Build folders #
+/build/
+/build_*/
+/build-*/
+/conan/test_package/build/
+
+# Clang tooling #
+.clangd/
+compile_commands.json
+
+# Vim #
+*.swp
+*.swo
+
+# Node/NPM #
+node_modules/
+
+# OS X#
+
+## system ##
+*.DS_Store
+
+## XCode ##
+*.pbxuser
+*.xccheckout
+*.mode1v3
+xcuserdata/
+*.dSYM
+
+# Windows #
+
+## system ##
+Thumbs.db
+
+## Visual Studio ##
+*.suo
+*.sdf
+*.ncb
+*.user
+ipch
+.vscode

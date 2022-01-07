@@ -11,12 +11,13 @@
 #include <string>
 #include <map>
 
+namespace ad {
+namespace sounds {
+    
 //Macro to get the file and line where the openAL call is made
 #define alCall(function, ...) alCallImpl(__FILE__, __LINE__, function, __VA_ARGS__)
 #define alcCall(function, device, ...) alcCallImpl(__FILE__, __LINE__, function, device, __VA_ARGS__)
 
-namespace ad {
-namespace sounds {
 
 //Helper function to help handle openAL error which can be confusing
 bool check_al_errors(const std::string & filename, const std::uint_fast32_t line);
