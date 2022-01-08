@@ -33,7 +33,7 @@ find_package(Math CONFIG REQUIRED COMPONENTS math)
 
 find_package(spdlog REQUIRED COMPONENTS spdlog)
 find_package(OpenAL REQUIRED CONFIG)
-find_package(Vorbis REQUIRED File CONFIG)
+find_package(Vorbis REQUIRED CONFIG)
 find_package(Ogg REQUIRED CONFIG)
 
 target_link_libraries(${TARGET_NAME}
