@@ -103,6 +103,7 @@ jobs:
           ${{ steps.recipe.outputs.reference }}@
 
       - name: Tests LOL
+        run: echo "LOL"
 
       - name: Deploy recipe (develop)
         if: ${{ success() && contains('refs/heads/develop', github.ref) }}
