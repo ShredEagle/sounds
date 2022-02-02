@@ -28,7 +28,7 @@ class SoundsConan(ConanFile):
         ("vorbis/1.3.7"),
 
         ("graphics/72d3510229@adnn/develop"),
-        ("math/017e7c42bf@adnn/develop"),
+        ("math/fd9b30cce0@adnn/develop"),
     )
 
     build_policy = "missing"
