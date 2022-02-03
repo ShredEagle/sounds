@@ -27,7 +27,7 @@ class SoundsConan(ConanFile):
         ("openal/1.21.1"),
         ("vorbis/1.3.7"),
 
-        ("graphics/72d3510229@adnn/develop"),
+        ("graphics/43d7c2d95e@adnn/develop"),
         ("math/fd9b30cce0@adnn/develop"),
     )
 
