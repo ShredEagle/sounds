@@ -232,22 +232,30 @@ SoundManager::~SoundManager()
     }
 }
 
-ALuint SoundManager::playSound(handy::StringId & aSoundId, ALboolean looping)
+ALuint SoundManager::playSound(handy::StringId & aSoundId, SoundOption aOptions)
 {
     const OggSoundData & soundData = mLoadedSoundList.at(aSoundId);
     ALuint source;
     alCall(alGenSources, 1, &source);
     alCall(alSourcef, source, AL_PITCH, 1);
 
-    alCall(alSourcef, source, AL_GAIN, soundData.gain);
-    alCall(alSource3f, source, AL_POSITION, soundData.position.x(), soundData.position.y(), soundData.position.z());
-    alCall(alSource3f, source, AL_VELOCITY, soundData.velocity.x(), soundData.velocity.y(), soundData.velocity.z());
+    alCall(alSourcef, source, AL_GAIN, aOptions.gain);
+    alCall(alSource3f, source, AL_POSITION, aOptions.position.x(), aOptions.position.y(), aOptions.position.z());
+    alCall(alSource3f, source, AL_VELOCITY, aOptions.velocity.x(), aOptions.velocity.y(), aOptions.velocity.z());
 
-    alCall(alSourcei, source, AL_LOOPING, looping);
+    alCall(alSourcei, source, AL_LOOPING, aOptions.looping);
     alCall(alSourcei, source, AL_BUFFER, soundData.buffers[0]);
     alCall(alSourcePlay, source);
 
     return source;
+}
+
+void SoundManager::modifySound(ALuint aSource, SoundOption aOptions)
+{
+    alCall(alSourcef, aSource, AL_GAIN, aOptions.gain);
+    alCall(alSource3f, aSource, AL_POSITION, aOptions.position.x(), aOptions.position.y(), aOptions.position.z());
+    alCall(alSource3f, aSource, AL_VELOCITY, aOptions.velocity.x(), aOptions.velocity.y(), aOptions.velocity.z());
+    alCall(alSourcei, aSource, AL_LOOPING, aOptions.looping);
 }
 
 bool SoundManager::stopSound(ALuint aSource)

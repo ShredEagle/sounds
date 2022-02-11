@@ -29,9 +29,14 @@ struct OggSoundData
     std::uint8_t bitsPerSample;
     OggVorbis_File oggFile;
     bool streamedData = false;
+};
+
+struct SoundOption
+{
+    float gain = 1.f;
     math::Position<3, float> position = math::Position<3, float>::Zero();
     math::Vec<3, float> velocity = math::Vec<3, float>::Zero();
-    float gain = 1.f;
+    ALboolean looping = AL_FALSE;
 };
 
 //Should always return by value
@@ -48,7 +53,8 @@ class SoundManager
         SoundManager();
         ~SoundManager();
         void storeDataInLoadedSound(const OggSoundData & aSoundData);
-        ALuint playSound(handy::StringId & aSoundId, ALboolean looping = AL_FALSE);
+        ALuint playSound(handy::StringId & aSoundId, SoundOption aOptions = {});
+        void modifySound(ALuint aSource, SoundOption aOptions);
         bool stopSound(ALuint aSource);
         bool pauseSound(ALuint aSource);
         ALint getSourceState(ALuint aSource);
