@@ -37,6 +37,7 @@ struct SoundOption
     math::Position<3, float> position = math::Position<3, float>::Zero();
     math::Vec<3, float> velocity = math::Vec<3, float>::Zero();
     ALboolean looping = AL_FALSE;
+    bool storeInManager;
 };
 
 //Should always return by value
@@ -56,12 +57,14 @@ class SoundManager
         ALuint playSound(handy::StringId & aSoundId, SoundOption aOptions = {});
         void modifySound(ALuint aSource, SoundOption aOptions);
         bool stopSound(ALuint aSource);
+        bool stopSound(handy::StringId & aId);
         bool pauseSound(ALuint aSource);
         ALint getSourceState(ALuint aSource);
         void deleteSources(std::vector<ALuint> aSourcesToDelete);
 
     private:
         std::unordered_map<handy::StringId, OggSoundData> mLoadedSoundList;
+        std::unordered_map<handy::StringId, ALuint> mStoredSources;
         ALCdevice * mOpenALDevice;
         ALCcontext * mOpenALContext;
         ALCboolean mContextIsCurrent;

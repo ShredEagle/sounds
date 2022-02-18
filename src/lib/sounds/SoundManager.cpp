@@ -247,6 +247,11 @@ ALuint SoundManager::playSound(handy::StringId & aSoundId, SoundOption aOptions)
     alCall(alSourcei, source, AL_BUFFER, soundData.buffers[0]);
     alCall(alSourcePlay, source);
 
+    if (aOptions.storeInManager && !mStoredSources.contains(aSoundId))
+    {
+        mStoredSources.insert({aSoundId, source});
+    }
+
     return source;
 }
 
@@ -261,6 +266,16 @@ void SoundManager::modifySound(ALuint aSource, SoundOption aOptions)
 bool SoundManager::stopSound(ALuint aSource)
 {
     return alCall(alSourceStop, aSource);
+}
+
+bool SoundManager::stopSound(handy::StringId & aId)
+{
+    if (mStoredSources.contains(aId))
+    {
+        ALuint source = mStoredSources.at(aId);
+        return alCall(alSourceStop, source);
+    }
+    return false;
 }
 
 bool SoundManager::pauseSound(ALuint aSource)
