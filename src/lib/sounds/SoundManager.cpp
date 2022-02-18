@@ -273,6 +273,7 @@ bool SoundManager::stopSound(handy::StringId & aId)
     if (mStoredSources.contains(aId))
     {
         ALuint source = mStoredSources.at(aId);
+        mStoredSources.erase(aId);
         return alCall(alSourceStop, source);
     }
     return false;
