@@ -32,7 +32,7 @@ static size_t readOggInputStreamCallback(void * destination, size_t elementSize,
     }
     if (stream.fail() && stream.eof())
     {
-        spdlog::get("grapito")->info("INFO: file read reach EOF");
+        spdlog::get("grapito")->trace("INFO: file read reach EOF");
     }
 
     return static_cast<size_t>(bytesRead);
