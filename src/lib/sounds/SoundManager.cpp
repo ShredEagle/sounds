@@ -232,7 +232,7 @@ SoundManager::~SoundManager()
     }
 }
 
-ALuint SoundManager::playSound(handy::StringId & aSoundId, SoundOption aOptions)
+ALuint SoundManager::playSound(handy::StringId aSoundId, SoundOption aOptions)
 {
     const OggSoundData & soundData = mLoadedSoundList.at(aSoundId);
     ALuint source;
@@ -268,7 +268,7 @@ bool SoundManager::stopSound(ALuint aSource)
     return alCall(alSourceStop, aSource);
 }
 
-bool SoundManager::stopSound(handy::StringId & aId)
+bool SoundManager::stopSound(handy::StringId aId)
 {
     if (mStoredSources.contains(aId))
     {

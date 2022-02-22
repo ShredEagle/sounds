@@ -5,7 +5,7 @@
 
 #include <platform/Filesystem.h>
 #include <math/Vector.h>
-#include "handy/StringId.h"
+#include <handy/StringId.h>
 
 #include <AL/al.h>
 #include <AL/alc.h>
@@ -54,10 +54,10 @@ class SoundManager
         SoundManager();
         ~SoundManager();
         void storeDataInLoadedSound(const OggSoundData & aSoundData);
-        ALuint playSound(handy::StringId & aSoundId, SoundOption aOptions = {});
+        ALuint playSound(handy::StringId aSoundId, SoundOption aOptions = {});
         void modifySound(ALuint aSource, SoundOption aOptions);
         bool stopSound(ALuint aSource);
-        bool stopSound(handy::StringId & aId);
+        bool stopSound(handy::StringId aId);
         bool pauseSound(ALuint aSource);
         ALint getSourceState(ALuint aSource);
         void deleteSources(std::vector<ALuint> aSourcesToDelete);
