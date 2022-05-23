@@ -148,7 +148,7 @@ OggSoundData loadOggFile(std::istream & aInputStream, handy::StringId aSoundId, 
         {
             sizeRead += result;
             //Add to the result dataBuffer the data that was read
-            dataBuffer.insert(dataBuffer.end(), readBuffer, readBuffer + result);
+            dataBuffer.insert(dataBuffer.end(), static_cast<char*>(readBuffer), readBuffer + result);
         }
         else if (result == OV_HOLE)
         {

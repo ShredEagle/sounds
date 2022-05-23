@@ -28,7 +28,7 @@ class SoundsConan(ConanFile):
         ("spdlog/1.9.2"),
         ("openal/1.21.1"),
         ("zlib/1.2.12"),
-        ("vorbis/1.3.7"),
+        ("stb/cci.20210910"),
 
         ("handy/aeb7e759ba@adnn/develop"),
         ("math/08118a6f2c@adnn/develop"),
