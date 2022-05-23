@@ -24,11 +24,21 @@ jobs:
         # Disable macos while spdlog crashes its compiler
         # see: https://github.com/conan-io/conan-center-index/issues/8480
         #os: [ubuntu-latest, windows-latest, macos-11]
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-20.04, windows-latest]
+        compiler: [clang, gcc, msvc]
         cppstd: [20]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-20.04
+            compiler: gcc
             gccversion: 10
+        exclude:
+          - os: windows-latest
+            compiler: clang
+          - os: windows-latest
+            compiler: gcc
+          - os: ubuntu-20.04
+            compiler: msvc
+
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -39,10 +49,18 @@ jobs:
       - run: git config --global core.autocrlf input
 
       - name: Select GCC version.
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.compiler == 'gcc'
         run: |
           echo "CC=gcc-${{ matrix.gccversion }}" >> $GITHUB_ENV
           echo "CXX=g++-${{ matrix.gccversion }}" >> $GITHUB_ENV
+
+      - name: Install clang
+        if: runner.os == 'Linux' && matrix.compiler == 'clang'
+        run: |
+          sudo apt update
+          sudo apt install clang-12
+          echo "CC=clang" >> $GITHUB_ENV
+          echo "CXX=clang++" >> $GITHUB_ENV
 
       - uses: actions/checkout@v2
         with:
