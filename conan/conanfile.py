@@ -30,8 +30,8 @@ class SoundsConan(ConanFile):
         ("zlib/1.2.12"),
         ("vorbis/1.3.7"),
 
-        ("handy/bfed056640@adnn/develop"),
-        ("math/4234fd5aaf@adnn/develop"),
+        ("handy/aeb7e759ba@adnn/develop"),
+        ("math/08118a6f2c@adnn/develop"),
     )
 
     build_policy = "missing"

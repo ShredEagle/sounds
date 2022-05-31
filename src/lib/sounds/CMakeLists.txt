@@ -44,7 +44,7 @@ target_link_libraries(${TARGET_NAME}
 
         spdlog::spdlog
         OpenAL::OpenAL
-        stb::stb
+        Vorbis::vorbisfile
 )
 
 ##

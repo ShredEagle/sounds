@@ -7,7 +7,7 @@
 
 #include <functional>
 #include <ios>
-#include <istream>
+#include <fstream>
 #include <vector>
 
 namespace ad {

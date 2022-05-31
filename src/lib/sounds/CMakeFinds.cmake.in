@@ -3,4 +3,4 @@
 
 @find_package@(spdlog @REQUIRED@)
 @find_package@(OpenAL @REQUIRED@)
-@find_package@(stb @REQUIRED@)
+@find_package@(Vorbis @REQUIRED@)
