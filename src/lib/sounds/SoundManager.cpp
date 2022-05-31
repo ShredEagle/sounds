@@ -80,14 +80,14 @@ static ov_callbacks OggVorbisCallbacks{
     tellOggInputStreamCallback
 };
 
-OggSoundData loadOggFileFromPath(const filesystem::path & aPath, bool streamed)
+OggSoundData CreateOggData(const filesystem::path & aPath, bool streamed)
 {
     std::ifstream soundStream{aPath.string(),std::ios::binary};
     handy::StringId soundStringId{aPath.stem().string()};
     return loadOggFile(soundStream, soundStringId, streamed);
 }
 
-OggSoundData loadOggFile(std::istream & aInputStream, handy::StringId aSoundId, bool streamed)
+OggSoundData CreateOggData(std::istream & aInputStream, handy::StringId aSoundId, bool streamed)
 {
     OggVorbis_File oggFile;
     OggSoundData resultSoundData{.soundId = aSoundId};
@@ -148,7 +148,7 @@ OggSoundData loadOggFile(std::istream & aInputStream, handy::StringId aSoundId, 
         {
             sizeRead += result;
             //Add to the result dataBuffer the data that was read
-            dataBuffer.insert(dataBuffer.end(), static_cast<char*>(readBuffer), readBuffer + result);
+            dataBuffer.insert(dataBuffer.end(), static_cast<char*>(readBuffer, readBuffer + result);
         }
         else if (result == OV_HOLE)
         {
@@ -247,6 +247,8 @@ ALuint SoundManager::playSound(handy::StringId aSoundId, SoundOption aOptions)
     alCall(alSourcei, source, AL_BUFFER, soundData.buffers[0]);
     alCall(alSourcePlay, source);
 
+    // This is used if the sound is not created by an entity
+    // And we need someone to own the data
     if (aOptions.storeInManager && !mStoredSources.contains(aSoundId))
     {
         mStoredSources.insert({aSoundId, source});

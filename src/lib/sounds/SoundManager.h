@@ -9,7 +9,8 @@
 
 #include <AL/al.h>
 #include <AL/alc.h>
-#include <vorbis/vorbisfile.h>
+#include <stb.h>
+#include <stb_vorbis.c>
 
 #include <cstdint>
 #include <map>
@@ -22,13 +23,16 @@ namespace sounds {
 struct OggSoundData
 {
     handy::StringId soundId;
-    std::vector<ALuint> buffers;
-    int channels;
+
+    std::istream & dataStream;
+    std::streamsize lengthRead;
     long sampleRate;
-    ALenum format;
-    std::uint8_t bitsPerSample;
-    OggVorbis_File oggFile;
+    bool fullyLoaded;
     bool streamedData = false;
+
+    std::uint8_t bitsPerSample;
+    std::vector<ALuint> buffersToRead;
+    ALenum channels;
 };
 
 struct SoundOption
@@ -40,9 +44,16 @@ struct SoundOption
     bool storeInManager;
 };
 
+struct SoundQueue
+{
+    handy::StringId queueId;
+    ALuint sourceQueue;
+    std::vector<std::unordered_map<handy::StringId, SoundOption>> data;
+};
+
 //Should always return by value
-OggSoundData loadOggFileFromPath(const filesystem::path & path, bool streamed);
-OggSoundData loadOggFile(std::istream & aInputStream, handy::StringId aSoundId, bool streamed);
+OggSoundData CreateOggData(const filesystem::path & path, bool streamed);
+OggSoundData CreateOggData(std::istream & aInputStream, handy::StringId aSoundId, bool streamed);
 
 //There is three step to play sound
 //First load the file into RAM
@@ -68,6 +79,7 @@ class SoundManager
         ALCdevice * mOpenALDevice;
         ALCcontext * mOpenALContext;
         ALCboolean mContextIsCurrent;
+        std::vector<ALuint> freebuffer;
 };
 
 } // namespace grapito
