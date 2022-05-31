@@ -1,0 +1,6 @@
+@find_package@(Handy CONFIG @REQUIRED@ COMPONENTS resource handy)
+@find_package@(Math CONFIG @REQUIRED@ COMPONENTS math)
+
+@find_package@(spdlog @REQUIRED@)
+@find_package@(OpenAL @REQUIRED@)
+@find_package@(stb @REQUIRED@)

@@ -10,16 +10,22 @@ set(${TARGET_NAME}_SOURCES
     SoundUtilities.cpp
 )
 
-add_library(${TARGET_NAME}
-    ${${TARGET_NAME}_SOURCES}
-    ${${TARGET_NAME}_HEADERS}
-)
-
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR}
              FILES ${${TARGET_NAME}_HEADERS} ${${TARGET_NAME}_SOURCES}
 )
 
+add_library(${TARGET_NAME}
+    ${${TARGET_NAME}_SOURCES}
+    ${${TARGET_NAME}_HEADERS})
+
 add_library(ad::${TARGET_NAME} ALIAS ${TARGET_NAME})
+
+# Custom target to have the files show up in the IDE
+add_custom_target(${TARGET_NAME}_IDE
+    SOURCES
+        ${${TARGET_NAME}_HEADERS}
+        ${${TARGET_NAME}_SOURCES}
+)
 
 cmc_target_current_include_directory(${TARGET_NAME})
 
@@ -28,23 +34,17 @@ cmc_target_current_include_directory(${TARGET_NAME})
 ## Dependencies
 ##
 
-find_package(Graphics CONFIG REQUIRED COMPONENTS arte graphics resource)
-find_package(Math CONFIG REQUIRED COMPONENTS math)
-
-find_package(spdlog REQUIRED COMPONENTS spdlog)
-find_package(OpenAL REQUIRED CONFIG)
-find_package(Vorbis REQUIRED CONFIG)
-find_package(Ogg REQUIRED CONFIG)
+cmc_find_dependencies(FILE CMakeFinds.cmake.in)
 
 target_link_libraries(${TARGET_NAME}
     PUBLIC
         ad::math
-        ad::graphics
         ad::resource
+        ad::handy
 
         spdlog::spdlog
         OpenAL::OpenAL
-        Vorbis::vorbisfile
+        stb::stb
 )
 
 ##
@@ -59,4 +59,5 @@ cmc_install_with_folders(DESTINATION include/${TARGET_NAME}/${TARGET_NAME}
                          FILES ${${TARGET_NAME}_HEADERS})
 # Prepare CMake package in both build and install trees
 cmc_install_packageconfig(${TARGET_NAME} ${TARGET_NAME}Targets ${PROJECT_NAME}
+                          FIND_FILE CMakeFinds.cmake.in
                           NAMESPACE ad::)

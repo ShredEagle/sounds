@@ -1,7 +1,9 @@
 from conans import ConanFile, tools
 from conan.tools.cmake import CMake
+from conan.tools.files import copy
 
 from os import path
+from os import getcwd
 
 
 class SoundsConan(ConanFile):
@@ -22,17 +24,18 @@ class SoundsConan(ConanFile):
     }
 
     requires = (
-        ("boost/1.77.0"),
+        ("boost/1.79.0"),
         ("spdlog/1.9.2"),
         ("openal/1.21.1"),
+        ("zlib/1.2.12"),
         ("vorbis/1.3.7"),
 
-        ("graphics/092da6bc60@adnn/develop"),
-        ("math/fd9b30cce0@adnn/develop"),
+        ("handy/bfed056640@adnn/develop"),
+        ("math/4234fd5aaf@adnn/develop"),
     )
 
     build_policy = "missing"
-    generators = "cmake_paths", "cmake_find_package_multi", "CMakeToolchain"
+    generators = "CMakeDeps", "CMakeToolchain"
 
     scm = {
         "type": "git",
@@ -40,6 +43,8 @@ class SoundsConan(ConanFile):
         "revision": "auto",
         "submodule": "recursive",
     }
+    python_requires="shred_conan_base/0.0.2@adnn/develop"
+    python_requires_extend="shred_conan_base.ShredBaseConanFile"
 
 
     def _generate_cmake_configfile(self):
@@ -48,8 +53,15 @@ class SoundsConan(ConanFile):
         with open("conanuser_config.cmake", "w") as config:
             config.write("message(STATUS \"Including user generated conan config.\")\n")
             # avoid path.join, on Windows it outputs '\', which is a string escape sequence.
-            config.write("include(\"{}\")\n".format("${CMAKE_CURRENT_LIST_DIR}/conan_paths.cmake"))
+            #config.write("include(\"{}\")\n".format("${CMAKE_CURRENT_LIST_DIR}/conan_paths.cmake"))
             config.write("set({} {})\n".format("BUILD_tests", self.options.build_tests))
+            config.write("set(CMAKE_EXPORT_COMPILE_COMMANDS 1)\n".format("BUILD_tests", self.options.build_tests))
+
+
+    def export_sources(self):
+        # The path of the CMakeLists.txt we want to export is one level above
+        folder = path.join(self.recipe_folder, "..")
+        copy(self, "*.txt", folder, self.export_sources_folder)
 
 
     def _configure_cmake(self):
@@ -77,4 +89,9 @@ class SoundsConan(ConanFile):
 
 
     def package_info(self):
-        pass
+        #self.cpp_info.libs = tools.collect_libs(self)
+        self.cpp_info.set_property("cmake_find_mode", "none")
+        if self.folders.build_folder:
+            self.cpp_info.builddirs.append(self.folders.build_folder)
+        else:
+            self.cpp_info.builddirs.append(path.join('lib', 'cmake'))

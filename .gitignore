@@ -7,6 +7,11 @@
 /build-*/
 /conan/test_package/build/
 
+# Conan
+/conan/test_package/build/
+/conan/graph_info.json
+CMakeUserPresets.json
+
 # Clang tooling #
 .clangd/
 compile_commands.json
