@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-test-deployrecipe:
-    uses: shredeagle/reusable-workflows/.github/workflows/main_build.yml@v1.0.0
+    uses: shredeagle/reusable-workflows/.github/workflows/main_build.yml@v2.0.1
     with:
       # Disable macOS
       # apple-clang 13 is being a little itch with deduction guides for template aliases.
