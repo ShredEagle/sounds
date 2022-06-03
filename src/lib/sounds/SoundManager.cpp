@@ -1,208 +1,202 @@
 #include "SoundManager.h"
 
-#include "SoundUtilities.h"
-
-#include <spdlog/spdlog.h>
 #include <AL/al.h>
-
+#include <cstddef>
+#include <fstream>
 #include <functional>
 #include <ios>
-#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <spdlog/spdlog.h>
 #include <vector>
 
 namespace ad {
 namespace sounds {
 
-constexpr int StreamingBufferSize = 32768;
+constexpr std::streamsize headerBlockReadSize = 8192;
+// Duration of music we want to extract from the stream (in s)
+constexpr float MINIMUM_DURATION_EXTRACTED = 0.1;
+constexpr int SAMPLE_APPROXIMATION = 22050;
+constexpr int MINIMUM_SAMPLE_EXTRACTED = MINIMUM_DURATION_EXTRACTED * SAMPLE_APPROXIMATION;
+constexpr int READ_CHUNK_SIZE = 16384;
 
-static size_t readOggInputStreamCallback(void * destination, size_t elementSize, size_t elementCount, void * aDatasource)
+OggSoundData CreateOggData(const filesystem::path & aPath)
 {
-    std::streamsize lengthRead = elementSize * elementCount;
-    std::istream & stream = *static_cast<std::istream*>(aDatasource);
-    stream.read(static_cast<char*>(destination), lengthRead);
-    const std::streamsize bytesRead = stream.gcount();
-
-    if (stream.fail() && !stream.eof())
-    {
-        spdlog::get("grapito")->error("ERROR: Ogg stream has fail bit set");
-    }
-    else if (stream.bad())
-    {
-        spdlog::get("grapito")->error("ERROR: Ogg stream has bad bit set");
-    }
-    if (stream.fail() && stream.eof())
-    {
-        spdlog::get("grapito")->trace("INFO: file read reach EOF");
-    }
-
-    return static_cast<size_t>(bytesRead);
-};
-
-static int seekOggInputStreamCallback(void * aDatasource, ogg_int64_t offset, int origin)
-{
-    return -1;
-    //Ok so the vorbis is shit honestly
-    //From what I've gathered the the origin parameters in the callback tells us
-    //from where we should seek into the stream
-    //Unfortunately I cannot confirm that...
-    static const std::vector<std::ios_base::seekdir> seekDirections{
-        std::ios_base::beg,
-        std::ios_base::cur,
-        std::ios_base::end
-    };
-    std::istream & stream = *static_cast<std::istream*>(aDatasource);
-    stream.seekg(offset, seekDirections.at(origin));
-
-    if (stream.fail() && !stream.eof())
-    {
-        spdlog::get("grapito")->error("ERROR: Ogg stream has fail bit set");
-    }
-    else if (stream.bad())
-    {
-        spdlog::get("grapito")->error("ERROR: Ogg stream has bad bit set");
-    }
-
-    return 0;
-};
-
-static long tellOggInputStreamCallback(void * aDatasource)
-{
-    std::istream & stream = *static_cast<std::istream*>(aDatasource);
-    const std::istream::pos_type position = stream.tellg();
-    assert(position >= 0); //Position cannot be 0 or less because it should point to the next data to be read
-    return static_cast<long>(position);
-};
-
-static ov_callbacks OggVorbisCallbacks{
-    readOggInputStreamCallback,
-    seekOggInputStreamCallback,
-    nullptr, //We do not close istreams
-    tellOggInputStreamCallback
-};
-
-OggSoundData CreateOggData(const filesystem::path & aPath, bool streamed)
-{
-    std::ifstream soundStream{aPath.string(),std::ios::binary};
+    std::ifstream soundStream{aPath.string(), std::ios::binary};
     handy::StringId soundStringId{aPath.stem().string()};
-    return loadOggFile(soundStream, soundStringId, streamed);
+    return CreateOggData(soundStream, soundStringId);
 }
 
-OggSoundData CreateOggData(std::istream & aInputStream, handy::StringId aSoundId, bool streamed)
+OggSoundData CreateOggData(std::istream & aInputStream, const handy::StringId aSoundId)
 {
-    OggVorbis_File oggFile;
-    OggSoundData resultSoundData{.soundId = aSoundId};
+    short * decoded;
+    int channels;
+    int error;
+    int sampleRate;
+    std::istreambuf_iterator<char> it{aInputStream}, end;
+    std::vector<std::uint8_t> data{it, end};
+    int len = stb_vorbis_decode_memory(data.data(), data.size(), &channels, &sampleRate,
+                                       &decoded);
+    OggSoundData resultSoundData{
+        .soundId = aSoundId,
+        .dataStream = aInputStream,
+        .fullyRead = true,
+        .lengthDecoded = len,
+        .fullyDecoded = true,
+        .sampleRate = sampleRate,
+    };
 
-    //Get ogg vorbis file format from the file
-    //std::cout << aInputStream.rdbuf();
-    int result = ov_open_callbacks(&aInputStream, &oggFile, nullptr, 0, OggVorbisCallbacks);
-    if (result == OV_EREAD)
-    {
-        spdlog::get("grapito")->error("A read from the media returned an error");
-    }
-    if (result == OV_ENOTVORBIS)
-    {
-        spdlog::get("grapito")->error("File is not a vorbis file");
-    }
-    else if (result < 0)
-    {
-        spdlog::get("grapito")->error("Error opening ogg file: {}", result);
-    }
-    //Get the info to fill out the format and frequency of the audio file
-    vorbis_info * fileInfo = ov_info(&oggFile, -1);
-
-    //We can always assume 16 bits for ogg vorbis
-    if (fileInfo->channels == 1)
-    {
-         resultSoundData.channels = AL_FORMAT_MONO16;
-    }
-    else
-    {
-        resultSoundData.channels = AL_FORMAT_STEREO16;
+    if (len == -1) {
+        spdlog::get("sounds")->error("A read from the media returned an error");
     }
 
-    resultSoundData.sampleRate = fileInfo->rate;
-    resultSoundData.bitsPerSample = 16;
-
-    // size = #samples * #channels * 2 (for 16 bit).
-    long sizeToRead = ov_pcm_total(&oggFile, -1) * fileInfo->channels * 2;
-    char readBuffer[2048];
-    int bitStream;
-    std::vector<char> dataBuffer;
-
-    constexpr int endian = 0; //0 for little endian 1 for big endian
-    constexpr int wordSize = 2; //2 for 16 bits files
-    constexpr int sgned = 1; //typically signed (0 is unsigned)
-
-    if (streamed)
-    {
-        sizeToRead = StreamingBufferSize;
-        resultSoundData.streamedData = true;
+    if (channels == 1) {
+        channels = AL_FORMAT_MONO16;
+    } else {
+        channels = AL_FORMAT_STEREO16;
     }
-
-    int sizeRead = 0;
-    do
-    {
-        //read from the file a readBuffer size amount of data
-        long result = ov_read(&oggFile, readBuffer, 2048, endian, wordSize, sgned, &bitStream);
-        if (result > 0)
-        {
-            sizeRead += result;
-            //Add to the result dataBuffer the data that was read
-            dataBuffer.insert(dataBuffer.end(), static_cast<char*>(readBuffer, readBuffer + result);
-        }
-        else if (result == OV_HOLE)
-        {
-            spdlog::get("grapito")->warn("WARNING: Page corrupted or missing");
-        }
-        else if (result == OV_EBADLINK)
-        {
-            spdlog::get("grapito")->error("ERROR: invalid stream section");
-        }
-        else if (result == OV_EINVAL)
-        {
-            spdlog::get("grapito")->error("ERROR: corrupted file header or can't open file");
-        }
-        else
-        {
-            //We reached the end of the file
-            break;
-        }
-    } while (true);
-
-    if (sizeRead == 0)
-    {
-        spdlog::get("grapito")->error("ERROR: did not read any data from ogg file");
-    }
-
-    ov_clear(&oggFile);
 
     ALuint buffer;
     alCall(alGenBuffers, 1, &buffer);
-    alCall(alBufferData, buffer, resultSoundData.channels, dataBuffer.data(), dataBuffer.size(), resultSoundData.sampleRate);
+    alCall(alBufferData, buffer, channels, decoded, len, sampleRate);
 
-    resultSoundData.buffers.push_back(buffer);
+    resultSoundData.leftBuffers.push_back(buffer);
 
     return resultSoundData;
+}
+
+OggSoundData CreateStreamedOggData(const filesystem::path & aPath)
+{
+    std::ifstream soundStream{aPath.string(), std::ios::binary};
+    handy::StringId soundStringId{aPath.stem().string()};
+    return CreateStreamedOggData(soundStream, soundStringId);
+}
+
+OggSoundData CreateStreamedOggData(std::istream & aInputStream,
+                                   const handy::StringId aSoundId)
+{
+    int used = 0;
+    int error;
+
+    std::vector<char> headerData(headerBlockReadSize);
+
+    aInputStream.read(headerData.data(), headerBlockReadSize);
+
+    std::streamsize lengthRead = aInputStream.gcount();
+
+    stb_vorbis * vorbisData = nullptr;
+    int tries = 0;
+
+    while (vorbisData == nullptr) {
+        vorbisData =
+            stb_vorbis_open_pushdata(reinterpret_cast<unsigned char *>(headerData.data()),
+                                     headerData.size(), &used, &error, nullptr);
+
+        if (vorbisData == nullptr) {
+            if (error == VORBIS_need_more_data) [[likely]] {
+                std::vector<char> moreHeaderData(headerBlockReadSize);
+                aInputStream.read(moreHeaderData.data(), headerBlockReadSize);
+                headerData.insert(headerData.end(), moreHeaderData.begin(),
+                                  moreHeaderData.end());
+                lengthRead += aInputStream.gcount();
+                spdlog::get("sounds")->info(
+                    "Unusually large headers required proceeding with a bigger chunk");
+            } else {
+                spdlog::get("sounds")->error(
+                    "Stb vorbis error while opening pushdata decoder: {}", error);
+                return {
+                    .soundId = aSoundId,
+                    .dataStream = aInputStream,
+                    .vorbisData = nullptr,
+                };
+            }
+        }
+    }
+
+    spdlog::get("sounds")->error("Used bytes {}", used);
+
+    stb_vorbis_info info = stb_vorbis_get_info(vorbisData);
+
+    OggSoundData resultSoundData{
+        .soundId = aSoundId,
+        .dataStream = aInputStream,
+        .lengthRead = lengthRead,
+        .undecodedReadData = {headerData.begin() + used, headerData.end()},
+        .fullyRead = true,
+        .vorbisData = vorbisData,
+        .vorbisInfo = info,
+        .lengthDecoded = 0,
+        .fullyDecoded = true,
+        .streamedData = true,
+        .sampleRate = static_cast<int>(info.sample_rate),
+    };
+
+    return resultSoundData;
+}
+
+void decodeSoundData(OggSoundData & aData)
+{
+    stb_vorbis * vorbisData = aData.vorbisData;
+    stb_vorbis_info info = aData.vorbisInfo;
+
+    std::istream & inputStream = aData.dataStream;
+    auto soundData = aData.undecodedReadData;
+
+    int channels;
+
+    int used = 0;
+    float ** output;
+    int samplesRead = 0;
+    int lengthRead = 0;
+
+    std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+    while (samplesRead / MINIMUM_SAMPLE_EXTRACTED) {
+        int passSampleRead;
+        int currentUsed;
+
+        currentUsed = stb_vorbis_decode_frame_pushdata(
+            vorbisData, reinterpret_cast<unsigned char *>(soundData.data() + used),
+            soundData.size() - used, &channels, &output, &passSampleRead);
+
+        used += currentUsed;
+
+        samplesRead += passSampleRead;
+        std::vector<char> moreHeaderData(READ_CHUNK_SIZE);
+        inputStream.read(moreHeaderData.data(), READ_CHUNK_SIZE);
+        soundData.insert(soundData.end(), moreHeaderData.begin(), moreHeaderData.end());
+        lengthRead += inputStream.gcount();
+
+        if (lengthRead < READ_CHUNK_SIZE)
+        {
+            aData.fullyRead = true;
+        }
+    }
+    spdlog::get("sounds")->info("total used bytes {}", used);
+    spdlog::get("sounds")->info("Samples {}", samplesRead);
+    std::chrono::steady_clock::time_point after = std::chrono::steady_clock::now();
+
+    std::chrono::duration<double> diff = after - now;
+
+    spdlog::get("sounds")->info("Elapsed time : {}", diff.count());
+
+    std::array<std::vector<float>, 2> buffers;
+    aData.decodedLeftData.assign(output[0], output[0] + samplesRead);
+    aData.decodedRightData.assign(output[1], output[1] + samplesRead);
 }
 
 SoundManager::SoundManager()
 {
     mOpenALDevice = alcOpenDevice(nullptr);
-    if(!mOpenALDevice)
-    {
+    if (!mOpenALDevice) {
         /* fail */
         spdlog::get("grapito")->error("Cannot open OpenAL sound device");
-    }
-    else
-    {
-        if (!alcCall(alcCreateContext, mOpenALContext, mOpenALDevice, mOpenALDevice, nullptr))
-        {
+    } else {
+        if (!alcCall(alcCreateContext, mOpenALContext, mOpenALDevice, mOpenALDevice,
+                     nullptr)) {
             spdlog::get("grapito")->error("Cannot create OpenAL context");
-        }
-        else
-        {
-            if (!alcCall(alcMakeContextCurrent, mContextIsCurrent, mOpenALDevice, mOpenALContext))
-            {
+        } else {
+            if (!alcCall(alcMakeContextCurrent, mContextIsCurrent, mOpenALDevice,
+                         mOpenALContext)) {
                 spdlog::get("grapito")->error("Cannot set OpenAL to current context");
             }
         }
@@ -211,69 +205,101 @@ SoundManager::SoundManager()
 
 SoundManager::~SoundManager()
 {
-    if (mContextIsCurrent)
-    {
-        if (!alcCall(alcMakeContextCurrent, mContextIsCurrent, mOpenALDevice, nullptr))
-        {
+    if (mContextIsCurrent) {
+        if (!alcCall(alcMakeContextCurrent, mContextIsCurrent, mOpenALDevice, nullptr)) {
             spdlog::get("grapito")->error("Well we're leaking audio memory now");
         }
 
-        if (!alcCall(alcDestroyContext, mOpenALDevice, mOpenALContext))
-        {
+        if (!alcCall(alcDestroyContext, mOpenALDevice, mOpenALContext)) {
             spdlog::get("grapito")->error("Well we're leaking audio memory now");
         }
 
         ALCboolean closed;
-        if (!alcCall(alcCloseDevice, closed, mOpenALDevice, mOpenALDevice))
-        {
+        if (!alcCall(alcCloseDevice, closed, mOpenALDevice, mOpenALDevice)) {
             spdlog::get("grapito")->error("Device just disappeared and I don't know why");
         }
-
     }
 }
 
-ALuint SoundManager::playSound(handy::StringId aSoundId, SoundOption aOptions)
+std::size_t SoundManager::playSound(
+    std::vector<std::tuple<handy::StringId, SoundOption>> aSoundQueue)
 {
-    const OggSoundData & soundData = mLoadedSoundList.at(aSoundId);
-    ALuint source;
-    alCall(alGenSources, 1, &source);
-    alCall(alSourcef, source, AL_PITCH, 1);
+    SoundQueue soundQueue;
+    for (auto [soundId, option] : aSoundQueue) {
+        const OggSoundData & soundData = mLoadedSoundList.at(soundId);
+        PlayingSound sound{soundData};
 
-    alCall(alSourcef, source, AL_GAIN, aOptions.gain);
-    alCall(alSource3f, source, AL_POSITION, aOptions.position.x(), aOptions.position.y(), aOptions.position.z());
-    alCall(alSource3f, source, AL_VELOCITY, aOptions.velocity.x(), aOptions.velocity.y(), aOptions.velocity.z());
+        soundQueue.sounds.push_back(sound);
 
-    alCall(alSourcei, source, AL_LOOPING, aOptions.looping);
-    alCall(alSourcei, source, AL_BUFFER, soundData.buffers[0]);
-    alCall(alSourcePlay, source);
+        ALuint source;
+        alCall(alGenSources, 1, &source);
+
+        soundQueue.source = source; 
+    }
 
     // This is used if the sound is not created by an entity
     // And we need someone to own the data
-    if (aOptions.storeInManager && !mStoredSources.contains(aSoundId))
-    {
-        mStoredSources.insert({aSoundId, source});
-    }
+    mStoreQueues.push_back(soundQueue);
+    std::size_t index = mStoreQueues.size() - 1;
 
-    return source;
+    return index;
+}
+
+void SoundManager::update()
+{
+    for (auto currentQueue : mStoreQueues)
+    {
+        std::size_t currentSoundIndex = currentQueue.currentSoundIndex;
+        ALuint source = currentQueue.source;
+        // queue is not playing
+        if (currentSoundIndex == -1)
+        {
+            //start the first buffer
+            currentQueue.currentSoundIndex = 0;
+        }
+
+        auto sound = currentQueue.sounds[currentSoundIndex];
+        auto data = sound.soundData;
+        int bufferQueued;
+
+        alCall(alGetSourcei, source, AL_BUFFERS_QUEUED, &bufferQueued);
+
+        // We always want 2 buffer queued on a source
+        if (bufferQueued < 2)
+        {
+            if (!sound.isStale)
+            {
+                if (data.lengthDecoded < sound.positionInData + MINIMUM_SAMPLE_EXTRACTED)
+                {
+                    decodeSoundData(data);
+                }
+
+                std::size_t nextPositionInData = sound.positionInData + MINIMUM_DURATION_EXTRACTED * data.vorbisInfo.sample_rate;
+
+                if (nextPositionInData > data.lengthDecoded && data.fullyDecoded)
+                {
+                }
+            }
+        }
+
+    }
 }
 
 void SoundManager::modifySound(ALuint aSource, SoundOption aOptions)
 {
     alCall(alSourcef, aSource, AL_GAIN, aOptions.gain);
-    alCall(alSource3f, aSource, AL_POSITION, aOptions.position.x(), aOptions.position.y(), aOptions.position.z());
-    alCall(alSource3f, aSource, AL_VELOCITY, aOptions.velocity.x(), aOptions.velocity.y(), aOptions.velocity.z());
+    alCall(alSource3f, aSource, AL_POSITION, aOptions.position.x(), aOptions.position.y(),
+           aOptions.position.z());
+    alCall(alSource3f, aSource, AL_VELOCITY, aOptions.velocity.x(), aOptions.velocity.y(),
+           aOptions.velocity.z());
     alCall(alSourcei, aSource, AL_LOOPING, aOptions.looping);
 }
 
-bool SoundManager::stopSound(ALuint aSource)
-{
-    return alCall(alSourceStop, aSource);
-}
+bool SoundManager::stopSound(ALuint aSource) { return alCall(alSourceStop, aSource); }
 
 bool SoundManager::stopSound(handy::StringId aId)
 {
-    if (mStoredSources.contains(aId))
-    {
+    if (mStoredSources.contains(aId)) {
         ALuint source = mStoredSources.at(aId);
         mStoredSources.erase(aId);
         return alCall(alSourceStop, source);
@@ -281,10 +307,7 @@ bool SoundManager::stopSound(handy::StringId aId)
     return false;
 }
 
-bool SoundManager::pauseSound(ALuint aSource)
-{
-    return alCall(alSourcePause, aSource);
-}
+bool SoundManager::pauseSound(ALuint aSource) { return alCall(alSourcePause, aSource); }
 
 void SoundManager::storeDataInLoadedSound(const OggSoundData & aSoundData)
 {
@@ -303,6 +326,5 @@ void SoundManager::deleteSources(std::vector<ALuint> aSourcesToDelete)
     alCall(alDeleteSources, aSourcesToDelete.size(), aSourcesToDelete.data());
 }
 
-}
-}
-
+} // namespace sounds
+} // namespace ad
