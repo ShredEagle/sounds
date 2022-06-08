@@ -12,6 +12,7 @@
 
 #include <AL/al.h>
 #include <AL/alc.h>
+#include <AL/alext.h>
 
 #include <cstdint>
 #include <map>
@@ -22,13 +23,15 @@ namespace ad {
 namespace sounds {
 
 constexpr std::array<ALenum, 3> SOUNDS_AL_FORMAT = {0, AL_FORMAT_MONO16, AL_FORMAT_STEREO16};
+constexpr std::array<ALenum, 3> STREAM_SOUNDS_AL_FORMAT = {0, AL_FORMAT_MONO_FLOAT32, AL_FORMAT_MONO_FLOAT32};
+constexpr int BUFFER_PER_CHANNEL = 3;
 
 struct OggSoundData
 {
     handy::StringId soundId;
 
-    std::istream & dataStream;
-    std::streamsize lengthRead;
+    std::shared_ptr<std::istream> dataStream;
+    std::streamsize usedData = 0;
     std::vector<char> undecodedReadData;
     bool fullyRead;
 
@@ -36,22 +39,21 @@ struct OggSoundData
     stb_vorbis_info vorbisInfo;
     int lengthDecoded;
     bool fullyDecoded;
+    ALenum dataFormat;
 
     bool streamedData = false;
     bool cacheData = false;
 
     int sampleRate;
-    std::vector<float> decodedLeftData;
-    std::vector<float> decodedRightData;
+    //Left is 0 and Right is 1
+    std::vector<std::vector<float>> decodedData;
 };
 
 struct SoundOption
 {
     float gain = 1.f;
-    math::Position<3, float> leftPosition = math::Position<3, float>::Zero();
-    math::Vec<3, float> leftVelocity = math::Vec<3, float>::Zero();
-    math::Position<3, float> rightPosition = math::Position<3, float>::Zero();
-    math::Vec<3, float> rightVelocity = math::Vec<3, float>::Zero();
+    math::Position<3, float> position = math::Position<3, float>::Zero();
+    math::Vec<3, float> velocity = math::Vec<3, float>::Zero();
 
     ALboolean looping = AL_FALSE;
 };
@@ -60,47 +62,50 @@ struct PlayingSound
 {
     // Order of channels in ogg vorbis is left right
     // 3 buffers: processed buffer, queued buffer and playing buffer
-    explicit PlayingSound(const OggSoundData & aSoundData):
-        soundData{aSoundData}
+    PlayingSound(OggSoundData & aSoundData, SoundOption option):
+        soundData{aSoundData},
+        soundOption{option}
     {
-        std::array<ALuint, 6> buffers;  
-        alCall(alGenBuffers, 6, buffers.data());
+        buffers.resize(aSoundData.vorbisInfo.channels * BUFFER_PER_CHANNEL);
+        alCall(alGenBuffers, aSoundData.vorbisInfo.channels * BUFFER_PER_CHANNEL, buffers.data());
 
-        std::move(buffers.data(), buffers.data() + 3, leftBuffers.data());
-        std::move(buffers.data() + 3, buffers.data(), rightBuffers.data());
-
+        for (auto buf : buffers)
+        {
+            freeBuffers.push_back(buf);
+        }
     }
 
-    const OggSoundData & soundData;
-    std::array<ALuint, 3> leftBuffers;
-    std::size_t leftPlayingBufferIndex;
-    std::array<ALuint, 3> rightBuffers;
-    std::size_t rightPlayingBufferIndex;
+    OggSoundData & soundData;
+    //Left is first 3 buffers Right is last 3 buffers
+    std::list<ALuint> freeBuffers;
+    std::vector<ALuint> buffers;
 
-    SoundOption leftSoundOption;
-    SoundOption rightSoundOption;
+
+    SoundOption soundOption;
     size_t positionInData = 0;
     //This means that there is no more sound data to load into buffers
+    //(i.e. the nextPositionInData we want is passed, or at, the end of the decodedData)
     //and the sound will be discarded once all its buffers are played
     bool isStale = false;
 };
 
 struct SoundQueue
 {
-    ALuint source;
+    std::vector<ALuint> sources;
     std::vector<PlayingSound> sounds;
     int currentSoundIndex = -1;
 };
 
 //Should always return by value
 OggSoundData CreateOggData(const filesystem::path & path);
-OggSoundData CreateOggData(std::istream & aInputStream, handy::StringId aSoundId);
+OggSoundData CreateOggData(std::shared_ptr<std::istream> aInputStream, handy::StringId aSoundId);
 
 //Streamed version of ogg data
 OggSoundData CreateStreamedOggData(const filesystem::path & path);
-OggSoundData CreateStreamedOggData(std::istream & aInputStream, handy::StringId aSoundId);
+OggSoundData CreateStreamedOggData(std::shared_ptr<std::istream> aInputStream, handy::StringId aSoundId);
+void loadDataIntoBuffers(OggSoundData & aData, std::size_t aPositionInData);
 
-void decodeSoundData(OggSoundData & aData);
+int decodeSoundData(OggSoundData & aData);
 
 //There is three step to play sound
 //First load the file into RAM
@@ -120,6 +125,8 @@ class SoundManager
         ALint getSourceState(ALuint aSource);
         void deleteSources(std::vector<ALuint> aSourcesToDelete);
         void update();
+
+        void monitor();
 
     private:
         std::unordered_map<handy::StringId, OggSoundData> mLoadedSoundList;

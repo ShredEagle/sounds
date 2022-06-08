@@ -17,7 +17,7 @@ add_executable(${TARGET_NAME}
 target_compile_options(${TARGET_NAME}
     PRIVATE "-O2")
 #target_compile_options(${TARGET_NAME}
-#    PRIVATE "-fsanitize=leak" "-Wall" "-Wextra" "-fsanitize=address" "-fsanitize=undefined")
+#    PRIVATE "-g" "-fsanitize=leak" "-Wall" "-Wextra" "-fsanitize=address" "-fsanitize=undefined")
 #target_link_options(${TARGET_NAME}
 #    PRIVATE "-fsanitize=address" "-fsanitize=leak" "-fsanitize=undefined")
 
