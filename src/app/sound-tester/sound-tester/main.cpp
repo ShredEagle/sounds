@@ -2,32 +2,31 @@
 
 #include "spdlog/sinks/stdout_color_sinks.h"
 
-#include <iostream>
+#include <chrono>
+#include <thread>
+#include <spdlog/common.h>
 
-int main(int argc, char** argv)
+int main()
 {
     spdlog::stdout_color_mt("sounds");
-    spdlog::get("sounds")->set_level(spdlog::level::warn);
+    spdlog::get("sounds")->set_level(spdlog::level::info);
     ad::sounds::SoundManager manager;
 
-    //auto data = ad::sounds::CreateOggData("test.ogg");
-    //manager.storeDataInLoadedSound(data);
-    //manager.playSound({{data.soundId, {.gain = 2.f}}});
-
-    auto data = ad::sounds::CreateStreamedOggData("test.ogg");
-    manager.storeDataInLoadedSound(data);
-    manager.playSound({{data.soundId, {.gain = 1.f, .position = {2.f, 0.f, 0.f}}}});
-    manager.playSound({{data.soundId, {.gain = 1.f, .position = {2.f, 2.f, 0.f}}}});
-    manager.playSound({{data.soundId, {.gain = 1.f}}});
-    manager.playSound({{data.soundId, {.gain = 1.f}}});
-    //manager.playSound({{data.soundId, {.gain = 1.f, .position = {2.f, 0.f, 0.f}}}});
-    //manager.playSound({{data.soundId, {.gain = 1.f, .position = {2.f, 2.f, 0.f}}}});
-    //manager.playSound({{data.soundId, {.gain = 1.f}}});
-    //manager.playSound({{data.soundId, {.gain = 1.f}}});
+    std::shared_ptr<ad::sounds::TwoDSoundData> test = ad::sounds::CreateStreamedOggData<2>("test.ogg");
+    manager.storeDataInLoadedSound(test);
+    std::shared_ptr<ad::sounds::PointSoundData> ahouais = ad::sounds::CreateMonoData("ahouais.ogg");
+    manager.storeDataInLoadedSound(ahouais);
+    for (int i = 0; i < 1; i++)
+    {
+        ad::sounds::PointSoundCueHandle handle = manager.createSoundCue<1>({
+                {ahouais->soundId, {.gain = 0.4f}}
+                });
+        manager.playSound(handle);
+    }
     while(true)
     {
         manager.update();
-        manager.monitor();
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
+        //manager.monitor();
     }
-    stb_vorbis_close(data.vorbisData);
 }
