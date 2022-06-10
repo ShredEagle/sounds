@@ -12,13 +12,14 @@ int main()
     spdlog::get("sounds")->set_level(spdlog::level::info);
     ad::sounds::SoundManager manager;
 
-    std::shared_ptr<ad::sounds::TwoDSoundData> test = ad::sounds::CreateStreamedOggData<2>("test.ogg");
+    std::shared_ptr<ad::sounds::OggSoundData> test = ad::sounds::CreateStreamedOggData("test.ogg");
     manager.storeDataInLoadedSound(test);
-    std::shared_ptr<ad::sounds::PointSoundData> ahouais = ad::sounds::CreateMonoData("ahouais.ogg");
+    std::shared_ptr<ad::sounds::OggSoundData> ahouais = ad::sounds::CreateStreamedOggData("ahouais.ogg");
     manager.storeDataInLoadedSound(ahouais);
     for (int i = 0; i < 1; i++)
     {
-        ad::sounds::PointSoundCueHandle handle = manager.createSoundCue<1>({
+        ad::sounds::CueHandle handle = manager.createSoundCue({
+                {ahouais->soundId, {.gain = 0.4f}},
                 {ahouais->soundId, {.gain = 0.4f}}
                 });
         manager.playSound(handle);
