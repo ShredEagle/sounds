@@ -18,12 +18,12 @@ int main()
     manager.storeDataInLoadedSound(ahouaismono);
     std::shared_ptr<ad::sounds::OggSoundData> ahouais = ad::sounds::CreateStreamedOggData("ahouais.ogg");
     manager.storeDataInLoadedSound(ahouais);
-    for (int i = 0; i < 1; i++)
+    ad::sounds::CueHandle handle = manager.createSoundCue({
+            ahouais->soundId,
+            test->soundId
+            });
+    for (int i = 0; i < 3; i++)
     {
-        ad::sounds::CueHandle handle = manager.createSoundCue({
-                {ahouais->soundId, {.gain = 2.f}},
-                {test->soundId, {.gain = 0.4f}}
-                });
         manager.playSound(handle);
     }
     while(true)

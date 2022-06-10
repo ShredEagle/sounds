@@ -116,7 +116,7 @@ struct PlayingSound
 {
     // Order of channels in ogg vorbis is left right
     // 3 buffers: processed buffer, queued buffer and playing buffer
-    PlayingSound(const std::shared_ptr<OggSoundData> & aSoundData, SoundOption option):
+    PlayingSound(const std::shared_ptr<OggSoundData> & aSoundData):
         soundData{aSoundData}
     {
         buffers.resize(static_cast<std::size_t>(aSoundData->vorbisInfo.channels) * BUFFER_PER_CHANNEL);
@@ -141,11 +141,25 @@ struct PlayingSound
 
 struct SoundCue
 {
+    std::vector<std::shared_ptr<OggSoundData>> sounds;
+};
+
+struct PlayingSoundCue
+{
+    PlayingSoundCue(const std::shared_ptr<SoundCue> & aSoundCue)
+    {
+        alCall(alGenSources, 1, &source);
+        for (const std::shared_ptr<OggSoundData> & data : aSoundCue->sounds)
+        {
+            sounds.push_back(std::make_shared<PlayingSound>(data));
+        }
+    }
+
+    SoundCueState state = SoundCueState_NOT_PLAYING;
     ALuint source;
-    SoundOption soundOption;
     std::size_t currentPlayingSoundIndex = 0;
     std::size_t currentWaitingForBufferSoundIndex = 0;
-    SoundCueState state = SoundCueState_NOT_PLAYING;
+    SoundOption soundOption;
     std::vector<std::shared_ptr<PlayingSound>> sounds;
 };
 
@@ -177,11 +191,11 @@ class SoundManager
         void deleteSources(std::vector<ALuint> aSourcesToDelete);
         void monitor();
 
-        CueHandle createSoundCue(const std::vector<std::tuple<handy::StringId, SoundOption>> & aSoundList);
+        CueHandle createSoundCue(const std::vector<handy::StringId> & aSoundList);
 
         void bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSound);
 
-        void updateCue(const std::shared_ptr<SoundCue> & currentCue);
+        void updateCue(const std::shared_ptr<PlayingSoundCue> & currentCue);
 
         void update();
 
@@ -197,6 +211,7 @@ class SoundManager
 
         std::unordered_map<handy::StringId, std::shared_ptr<OggSoundData>> mLoadedSounds;
         std::map<CueHandle, std::shared_ptr<SoundCue>> mCues;
+        std::list<std::shared_ptr<PlayingSoundCue>> mPlayingCues;
         ALCdevice * mOpenALDevice;
         ALCcontext * mOpenALContext;
         ALCboolean mContextIsCurrent;

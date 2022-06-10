@@ -293,9 +293,8 @@ void SoundManager::deleteSources(std::vector<ALuint> aSourcesToDelete)
 
 void SoundManager::update()
 {
-    for (auto & cueHandlePair : mCues)
+    for (auto & currentCue : mPlayingCues)
     {
-        std::shared_ptr<SoundCue> currentCue = cueHandlePair.second;
         if (currentCue->state != SoundCueState_NOT_PLAYING)
         {
             updateCue(currentCue);
@@ -305,7 +304,7 @@ void SoundManager::update()
 
 void SoundManager::monitor()
 {
-    for (auto [handle, currentCue] : mCues)
+    for (auto currentCue : mPlayingCues)
     {
         ALint sourceState;
         alCall(alGetSourcei, currentCue->source, AL_SOURCE_STATE, &sourceState);
@@ -348,31 +347,25 @@ void SoundManager::storeDataInLoadedSound(const std::shared_ptr<OggSoundData> & 
 }
 
 
-CueHandle SoundManager::createSoundCue(const std::vector<std::tuple<handy::StringId, SoundOption>> & aSoundList)
+CueHandle SoundManager::createSoundCue(const std::vector<handy::StringId> & aSoundList)
 {
     std::shared_ptr<SoundCue> soundCue = std::make_shared<SoundCue>();
     int channels = 0;
 
-    for (auto [soundId, option] : aSoundList)
+    for (auto soundId : aSoundList)
     {
         std::shared_ptr<OggSoundData> soundData = getSoundData(soundId);
         if (channels == 0 || channels == soundData->vorbisInfo.channels)
         {
             channels = soundData->vorbisInfo.channels;
 
-            std::shared_ptr<PlayingSound> sound = std::make_shared<PlayingSound>(
-                    PlayingSound{soundData, option}
-                    );
-
-            soundCue->sounds.push_back(sound);
+            soundCue->sounds.push_back(soundData);
         }
         else
         {
             spdlog::get("sounds")->error("Cannot add sounds of different format on a cue");
         }
     }
-
-    alCall(alGenSources, 1, &soundCue->source);
 
     currentHandle += 1;
 
@@ -384,8 +377,11 @@ CueHandle SoundManager::createSoundCue(const std::vector<std::tuple<handy::Strin
 void SoundManager::playSound(CueHandle aHandle)
 {
     std::shared_ptr<SoundCue> soundCue = mCues.at(aHandle);
+    std::shared_ptr<PlayingSoundCue> playingCue = std::make_shared<PlayingSoundCue>(soundCue);
 
-    std::shared_ptr<PlayingSound> sound = soundCue->sounds[soundCue->currentPlayingSoundIndex];
+    mPlayingCues.push_back(playingCue);
+
+    std::shared_ptr<PlayingSound> sound = playingCue->sounds[playingCue->currentPlayingSoundIndex];
     std::shared_ptr<OggSoundData> data = sound->soundData;
 
     if (data->lengthDecoded < sound->positionInData + MINIMUM_SAMPLE_EXTRACTED && !data->fullyDecoded)
@@ -393,16 +389,16 @@ void SoundManager::playSound(CueHandle aHandle)
         decodeSoundData(data);
     }
 
-    soundCue->state = SoundCueState_PLAYING;
+    playingCue->state = SoundCueState_PLAYING;
     sound->state = PlayingSoundState_PLAYING;
     bufferPlayingSound(sound);
-    alCall(alSourceQueueBuffers, soundCue->source, sound->stagedBuffers.size(), sound->stagedBuffers.data());
+    alCall(alSourceQueueBuffers, playingCue->source, sound->stagedBuffers.size(), sound->stagedBuffers.data());
 
     //empty staged buffers
     sound->stagedBuffers.resize(0);
 
-    alCall(alSourcef, soundCue->source, AL_GAIN, 10.f);
-    alCall(alSourcePlay, soundCue->source);
+    alCall(alSourcef, playingCue->source, AL_GAIN, 10.f);
+    alCall(alSourcePlay, playingCue->source);
 }
 
 void SoundManager::bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSound)
@@ -458,7 +454,7 @@ void SoundManager::bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSou
     }
 }
 
-void SoundManager::updateCue(const std::shared_ptr<SoundCue> & currentCue)
+void SoundManager::updateCue(const std::shared_ptr<PlayingSoundCue> & currentCue)
 {
     std::size_t currentWaitingForBufferSoundIndex = currentCue->currentWaitingForBufferSoundIndex;
 
