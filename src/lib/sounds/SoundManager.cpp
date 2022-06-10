@@ -254,16 +254,17 @@ void decodeSoundData(const std::shared_ptr<OggSoundData> & aData)
                 aData->fullyRead = true;
             }
         }
+
+        if (aData->fullyRead && static_cast<std::size_t>(used) == aData->lengthRead)
+        {
+            spdlog::get("sounds")->info("Fully decoded");
+            aData->fullyDecoded = true;
+            break;
+        }
     }
 
     aData->lengthDecoded += static_cast<std::size_t>(samplesRead) * channels;
     aData->usedData = used;
-
-    if (aData->fullyRead && static_cast<std::size_t>(aData->usedData) == aData->lengthRead)
-    {
-        spdlog::get("sounds")->info("Fully decoded");
-        aData->fullyDecoded = true;
-    }
 
     std::chrono::steady_clock::time_point after = std::chrono::steady_clock::now();
 
@@ -297,7 +298,6 @@ void SoundManager::update()
         std::shared_ptr<SoundCue> currentCue = cueHandlePair.second;
         if (currentCue->state != SoundCueState_NOT_PLAYING)
         {
-            spdlog::get("sounds")->info("updating cue");
             updateCue(currentCue);
         }
     }
@@ -401,6 +401,7 @@ void SoundManager::playSound(CueHandle aHandle)
     //empty staged buffers
     sound->stagedBuffers.resize(0);
 
+    alCall(alSourcef, soundCue->source, AL_GAIN, 10.f);
     alCall(alSourcePlay, soundCue->source);
 }
 
@@ -428,30 +429,27 @@ void SoundManager::bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSou
             nextPositionInData = data->lengthDecoded;
         }
 
-        if (aSound->state == PlayingSoundState_PLAYING)
-        {
-            spdlog::get("sounds")->info(
-                    "buffer: {}, from: {}, size: {}",
-                    freeBuf,
-                    aSound->positionInData,
-                    nextPositionInData - aSound->positionInData
-                    );
+        spdlog::get("sounds")->info(
+                "buffer: {}, from: {}, size: {}",
+                freeBuf,
+                aSound->positionInData,
+                nextPositionInData - aSound->positionInData
+                );
 
-            //This is fucked because
-            //However for it to work we need at least 2 buffer to be free
-            alCall(
-                    alBufferData,
-                    freeBuf,
-                    data->vorbisInfo.channels == 1 ? AL_FORMAT_MONO_FLOAT32 : AL_FORMAT_STEREO_FLOAT32,
-                    data->decodedData.data() + aSound->positionInData,
-                    sizeof(float) * (nextPositionInData - aSound->positionInData),
-                    data->vorbisInfo.sample_rate
-                    );
+        //This is fucked because
+        //However for it to work we need at least 2 buffer to be free
+        alCall(
+                alBufferData,
+                freeBuf,
+                data->vorbisInfo.channels == 1 ? AL_FORMAT_MONO_FLOAT32 : AL_FORMAT_STEREO_FLOAT32,
+                data->decodedData.data() + aSound->positionInData,
+                sizeof(float) * (nextPositionInData - aSound->positionInData),
+                data->vorbisInfo.sample_rate
+                );
 
-            aSound->positionInData = nextPositionInData;
-            bufIt = freeBuffers.erase(bufIt);
-            aSound->stagedBuffers.push_back(freeBuf);
-        }
+        aSound->positionInData = nextPositionInData;
+        bufIt = freeBuffers.erase(bufIt);
+        aSound->stagedBuffers.push_back(freeBuf);
 
         if (nextPositionInData == data->lengthDecoded && data->fullyDecoded)
         {
@@ -464,19 +462,9 @@ void SoundManager::updateCue(const std::shared_ptr<SoundCue> & currentCue)
 {
     std::size_t currentWaitingForBufferSoundIndex = currentCue->currentWaitingForBufferSoundIndex;
 
-    spdlog::get("sounds")->trace("number of sounds in queue: {}", currentCue->sounds.size());
-    spdlog::get("sounds")->trace("currentSoundIndex: {}", currentSoundIndex);
-
-    std::shared_ptr<PlayingSound> sound = currentCue->sounds[currentSoundIndex];
+    std::shared_ptr<PlayingSound> sound = currentCue->sounds[currentWaitingForBufferSoundIndex];
 
     ALuint source = currentCue->source;
-
-#if 0 TEMPORARY
-    int bufferQueued = 0;
-
-    alCall(alGetSourceiv, source, AL_BUFFERS_QUEUED, &bufferQueued);
-    spdlog::get("sounds")->trace("number of buffer queued to {} : {}", source, bufferQueued);
-#endif
 
     int bufferProcessed = 0;
     alCall(alGetSourceiv, source, AL_BUFFERS_PROCESSED, &bufferProcessed);
@@ -486,7 +474,6 @@ void SoundManager::updateCue(const std::shared_ptr<SoundCue> & currentCue)
     //add used buffer to freeBuffers list
     if (bufferProcessed > 0)
     {
-        spdlog::get("sounds")->trace("number of buffer to free from {} : {}", source, bufferProcessed);
         std::vector<ALuint> bufferUnqueued(bufferProcessed);
         alCall(alSourceUnqueueBuffers, source, bufferProcessed, bufferUnqueued.data());
         freeBuffers.insert(freeBuffers.end(), bufferUnqueued.begin(), bufferUnqueued.end());
@@ -494,53 +481,53 @@ void SoundManager::updateCue(const std::shared_ptr<SoundCue> & currentCue)
         if (sound->state == PlayingSoundState_STALE && freeBuffers.size() == sound->buffers.size())
         {
             sound->state = PlayingSoundState_FINISHED;
+            currentWaitingForBufferSoundIndex++;
         }
     }
 
-    if (sound->state == PlayingSoundState_FINISHED)
+    if (sound->state == PlayingSoundState_FINISHED &&
+            currentCue->sounds.size() == ++currentCue->currentWaitingForBufferSoundIndex)
     {
-        if (currentCue->sounds.size() == ++currentCue->currentSoundIndex)
-        {
-            currentCue->state = SoundCueState_NOT_PLAYING;
-        }
-        else
-        {
-            sound = currentCue->sounds[currentCue->currentSoundIndex];
-        }
+        currentCue->state = SoundCueState_NOT_PLAYING;
     }
 
-
-    if (sound->state == PlayingSoundState_STALE)
+    if (currentCue->state == SoundCueState_PLAYING)
     {
-        currentSoundIndex++;
-        if (currentSoundIndex < currentCue->sounds.size())
-        {
-            sound = currentCue->sounds[currentSoundIndex];
-            sound->state = PlayingSoundState_PLAYING;
-        }
-        else
-        {
-            currentCue->state = SoundCueState_STALE;
-        }
-    }
+        sound = currentCue->sounds[currentCue->currentPlayingSoundIndex];
 
-    std::shared_ptr<OggSoundData> data = sound->soundData;
-    if (data->streamedData && currentCue->state == SoundCueState_PLAYING)
-    {
-        if (data->lengthDecoded < sound->positionInData + MINIMUM_SAMPLE_EXTRACTED && !data->fullyDecoded)
+        if (sound->state == PlayingSoundState_STALE)
         {
-            decodeSoundData(data);
+            if (currentCue->sounds.size() == ++currentCue->currentPlayingSoundIndex)
+            {
+                currentCue->state = SoundCueState_STALE;
+            }
+            else
+            {
+                sound = currentCue->sounds[currentCue->currentPlayingSoundIndex];
+                sound->state = PlayingSoundState_PLAYING;
+            }
         }
 
-        bufferPlayingSound(sound);
+        std::shared_ptr<OggSoundData> data = sound->soundData;
 
-        alCall(alSourceQueueBuffers, currentCue->source, sound->stagedBuffers.size(), sound->stagedBuffers.data());
+        if (currentCue->state == SoundCueState_PLAYING)
+        {
+            //if (!data->fullyDecoded)
+            if (data->lengthDecoded < sound->positionInData + MINIMUM_SAMPLE_EXTRACTED && !data->fullyDecoded)
+            {
+                decodeSoundData(data);
+            }
 
-        spdlog::get("sounds")->trace("remaining free buffer: {}", freeBuffers.size());
-        spdlog::get("sounds")->trace("paying buffer: {}", sound->stagedBuffers.size());
+            if (sound->state == PlayingSoundState_PLAYING)
+            {
+                bufferPlayingSound(sound);
+            }
 
-        //empty staged buffers
-        sound->stagedBuffers.resize(0);
+            alCall(alSourceQueueBuffers, currentCue->source, sound->stagedBuffers.size(), sound->stagedBuffers.data());
+
+            //empty staged buffers
+            sound->stagedBuffers.resize(0);
+        }
     }
 }
 
