@@ -45,6 +45,8 @@ SoundManager::SoundManager():
             }
         }
     }
+
+    alCall(alListener3f, AL_POSITION, 0.f, 0.f, 0.f);
 }
 
 SoundManager::~SoundManager()
@@ -177,6 +179,8 @@ std::shared_ptr<OggSoundData> CreateStreamedOggData(const std::shared_ptr<std::i
     spdlog::get("sounds")->info("Used bytes for header {}", used);
 
     stb_vorbis_info info = stb_vorbis_get_info(vorbisData);
+
+    spdlog::get("sounds")->info("Number of channels {}", info.channels);
 
     std::shared_ptr<OggSoundData> resultSoundData = std::make_shared<OggSoundData>(OggSoundData{
         .soundId = aSoundId,
@@ -336,11 +340,6 @@ bool SoundManager::stopSound(handy::StringId /*aId*/)
 
 bool SoundManager::pauseSound(ALuint aSource) { return alCall(alSourcePause, aSource); }
 
-std::shared_ptr<OggSoundData> & SoundManager::getSoundData(handy::StringId aSoundId)
-{
-    return mLoadedSounds.at(aSoundId);
-}
-
 void SoundManager::storeDataInLoadedSound(const std::shared_ptr<OggSoundData> & aSoundData)
 {
     mLoadedSounds.insert({aSoundData->soundId, aSoundData});
@@ -354,7 +353,7 @@ CueHandle SoundManager::createSoundCue(const std::vector<handy::StringId> & aSou
 
     for (auto soundId : aSoundList)
     {
-        std::shared_ptr<OggSoundData> soundData = getSoundData(soundId);
+        std::shared_ptr<OggSoundData> soundData = mLoadedSounds.at(soundId);
         if (channels == 0 || channels == soundData->vorbisInfo.channels)
         {
             channels = soundData->vorbisInfo.channels;
@@ -374,7 +373,7 @@ CueHandle SoundManager::createSoundCue(const std::vector<handy::StringId> & aSou
     return {currentHandle};
 }
 
-void SoundManager::playSound(CueHandle aHandle)
+std::shared_ptr<PlayingSoundCue> SoundManager::playSound(CueHandle aHandle)
 {
     std::shared_ptr<SoundCue> soundCue = mCues.at(aHandle);
     std::shared_ptr<PlayingSoundCue> playingCue = std::make_shared<PlayingSoundCue>(soundCue);
@@ -399,6 +398,8 @@ void SoundManager::playSound(CueHandle aHandle)
 
     alCall(alSourcef, playingCue->source, AL_GAIN, 10.f);
     alCall(alSourcePlay, playingCue->source);
+
+    return playingCue;
 }
 
 void SoundManager::bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSound)
@@ -466,6 +467,11 @@ void SoundManager::updateCue(const std::shared_ptr<PlayingSoundCue> & currentCue
     alCall(alGetSourceiv, source, AL_BUFFERS_PROCESSED, &bufferProcessed);
 
     std::list<ALuint> & freeBuffers = sound->freeBuffers;
+
+    //updating position and velocity
+    SoundOption option = currentCue->option;
+    alCall(alSource3f, source, AL_POSITION, option.position.x(), option.position.y(), option.position.z());
+    alCall(alSource3f, source, AL_VELOCITY, option.velocity.x(), option.velocity.y(), option.velocity.z());
 
     //add used buffer to freeBuffers list
     if (bufferProcessed > 0)

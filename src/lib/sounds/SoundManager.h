@@ -149,6 +149,7 @@ struct PlayingSoundCue
     PlayingSoundCue(const std::shared_ptr<SoundCue> & aSoundCue)
     {
         alCall(alGenSources, 1, &source);
+        alCall(alSourcei, source, AL_SOURCE_RELATIVE, AL_TRUE);
         for (const std::shared_ptr<OggSoundData> & data : aSoundCue->sounds)
         {
             sounds.push_back(std::make_shared<PlayingSound>(data));
@@ -159,7 +160,7 @@ struct PlayingSoundCue
     ALuint source;
     std::size_t currentPlayingSoundIndex = 0;
     std::size_t currentWaitingForBufferSoundIndex = 0;
-    SoundOption soundOption;
+    SoundOption option;
     std::vector<std::shared_ptr<PlayingSound>> sounds;
 };
 
@@ -190,20 +191,12 @@ class SoundManager
         ALint getSourceState(ALuint aSource);
         void deleteSources(std::vector<ALuint> aSourcesToDelete);
         void monitor();
-
         CueHandle createSoundCue(const std::vector<handy::StringId> & aSoundList);
-
         void bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSound);
-
         void updateCue(const std::shared_ptr<PlayingSoundCue> & currentCue);
-
         void update();
-
         void storeDataInLoadedSound(const std::shared_ptr<OggSoundData> & aSoundData);
-
-        void playSound(CueHandle aSoundCue);
-
-        std::shared_ptr<OggSoundData> & getSoundData(handy::StringId aSoundId);
+        std::shared_ptr<PlayingSoundCue> playSound(CueHandle aSoundCue);
 
     private:
 
