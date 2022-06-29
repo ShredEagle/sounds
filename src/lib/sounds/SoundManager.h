@@ -6,8 +6,6 @@
 #define STB_VORBIS_NO_INTEGER_CONVERSION
 #include "stb_vorbis.h"
 
-#include <cassert>
-#include <memory>
 #include <resource/ResourceManager.h>
 
 #include <platform/Filesystem.h>
@@ -21,17 +19,27 @@
 
 #include <fstream>
 #include <iostream>
-#include <cstdint>
 #include <map>
+#include <queue>
 #include <string>
 #include <vector>
-#include <variant>
-#include <type_traits>
 
 #define TEMPORARY
 
 namespace ad {
 namespace sounds {
+
+/*
+ * Ideas :
+ * - Max sources per radius (2 is a good number)
+ * - better ducking (like playWithDucking to lower all sound for the duration of the sound)
+ * - Removing source that are basically inaudible
+ * - Start sound paused to avoid sound playing before being placed
+ * - Find a way to manage memory consumption
+ * - Threaded decoding
+ * - Threaded mixing
+ * - Threaded feeding to openal
+ */
 
 enum PlayingSoundState
 {
@@ -46,19 +54,26 @@ enum PlayingSoundState
     PlayingSoundState_FINISHED,
 };
 
-enum SoundCueState
+enum PlayingSoundCueState
 {
-    SoundCueState_PLAYING,
-    SoundCueState_STALE,
-    SoundCueState_NOT_PLAYING,
+    PlayingSoundCueState_PLAYING,
+    PlayingSoundCueState_STALE,
+    PlayingSoundCueState_NOT_PLAYING,
+    PlayingSoundCueState_INTERRUPTED,
 };
 
+typedef int SoundCategory;
+
+constexpr int MASTER_SOUND_CATEGORY = -1;
+constexpr int HIGHEST_PRIORITY = -1;
 constexpr int BUFFER_PER_CHANNEL = 5;
+constexpr std::size_t MAX_SOURCES = 5;
+const std::size_t MAX_SOURCE_PER_CUE = 3;
 
 template<typename T>
 inline std::vector<T> interleave(T * left, T * right, int size)
 {
-    std::vector<float> result;
+    std::vector<float> result(size);
 
     for (std::size_t i = 0; i < static_cast<std::size_t>(size); i++)
     {
@@ -68,16 +83,6 @@ inline std::vector<T> interleave(T * left, T * right, int size)
 
     return result;
 }
-
-struct CueHandle
-{
-    std::size_t handle;
-
-    bool operator<(const CueHandle & rHs) const
-    {
-        return handle < rHs.handle;
-    }
-};
 
 struct OggSoundData
 {
@@ -103,28 +108,41 @@ struct OggSoundData
     std::vector<float> decodedData;
 };
 
+struct CueElementOption
+{
+    int loops = 0;
+};
+
 struct SoundOption
 {
     float gain = 1.f;
     math::Position<3, float> position = math::Position<3, float>::Zero();
     math::Vec<3, float> velocity = math::Vec<3, float>::Zero();
+};
 
-    ALboolean looping = AL_FALSE;
+struct CategoryOption
+{
+    float userGain = 1.f;
+    float gameGain = 1.f;
 };
 
 struct PlayingSound
 {
     // Order of channels in ogg vorbis is left right
     // 3 buffers: processed buffer, queued buffer and playing buffer
-    PlayingSound(const std::shared_ptr<OggSoundData> & aSoundData):
-        soundData{aSoundData}
+    PlayingSound(const std::shared_ptr<OggSoundData> & aSoundData, const CueElementOption & option):
+        soundData{aSoundData},
+        loops{option.loops}
     {
-        buffers.resize(static_cast<std::size_t>(aSoundData->vorbisInfo.channels) * BUFFER_PER_CHANNEL);
-        alCall(alGenBuffers, aSoundData->vorbisInfo.channels * BUFFER_PER_CHANNEL, buffers.data());
-
-        for (auto buf : buffers)
+        if (aSoundData != nullptr)
         {
-            freeBuffers.push_back(buf);
+            buffers.resize(static_cast<std::size_t>(aSoundData->vorbisInfo.channels) * BUFFER_PER_CHANNEL);
+            alCall(alGenBuffers, aSoundData->vorbisInfo.channels * BUFFER_PER_CHANNEL, buffers.data());
+
+            for (auto buf : buffers)
+            {
+                freeBuffers.push_back(buf);
+            }
         }
     }
 
@@ -134,6 +152,8 @@ struct PlayingSound
     std::vector<ALuint> stagedBuffers;
     std::vector<ALuint> buffers;
 
+    int loops;
+
 
     size_t positionInData = 0;
     PlayingSoundState state = PlayingSoundState_WAITING;
@@ -141,38 +161,131 @@ struct PlayingSound
 
 struct SoundCue
 {
-    std::vector<std::shared_ptr<OggSoundData>> sounds;
+    SoundCue(int aId, int aHandleIndex, SoundCategory aCategory, int aPriority) :
+        id{aId},
+        handleIndex{aHandleIndex},
+        category{aCategory},
+        priority{aPriority}
+    {}
+
+    int id;
+    int handleIndex;
+    SoundCategory category;
+    int priority;
+    std::vector<std::pair<std::shared_ptr<OggSoundData>, CueElementOption>> sounds;
+    std::shared_ptr<OggSoundData> interruptSound = nullptr;
 };
 
 struct PlayingSoundCue
 {
-    PlayingSoundCue(const std::shared_ptr<SoundCue> & aSoundCue)
+    PlayingSoundCue(
+            const SoundCue & aSoundCue,
+            ALuint source,
+            int aId,
+            int aHandleIndex
+            ) :
+        id{aId},
+        handleIndex{aHandleIndex},
+        priority{aSoundCue.priority},
+        category{aSoundCue.category},
+        source{source}
     {
-        alCall(alGenSources, 1, &source);
         alCall(alSourcei, source, AL_SOURCE_RELATIVE, AL_TRUE);
-        for (const std::shared_ptr<OggSoundData> & data : aSoundCue->sounds)
+        for (const auto & [data, option] : aSoundCue.sounds)
         {
-            sounds.push_back(std::make_shared<PlayingSound>(data));
+            sounds.push_back(std::make_shared<PlayingSound>(data, option));
+        }
+
+        if (aSoundCue.interruptSound != nullptr)
+        {
+            interruptSound = std::make_shared<PlayingSound>(aSoundCue.interruptSound, CueElementOption{});
         }
     }
 
-    SoundCueState state = SoundCueState_NOT_PLAYING;
+    std::shared_ptr<PlayingSound> getWaitingSound()
+    {
+        if (state == PlayingSoundCueState_INTERRUPTED)
+        {
+            return interruptSound;
+        }
+
+        return sounds[currentWaitingForBufferSoundIndex];
+    }
+
+    std::shared_ptr<PlayingSound> getPlayingSound()
+    {
+        if (state == PlayingSoundCueState_INTERRUPTED)
+        {
+            return interruptSound;
+        }
+
+        std::shared_ptr<PlayingSound> sound = sounds[currentPlayingSoundIndex];
+
+        if (sound->state == PlayingSoundState_STALE)
+        {
+            if (sounds.size() == ++currentPlayingSoundIndex)
+            {
+                state = PlayingSoundCueState_STALE;
+            }
+            else
+            {
+                sound = sounds[currentPlayingSoundIndex];
+                sound->state = PlayingSoundState_PLAYING;
+            }
+        }
+
+        return sound;
+    }
+
+    int id;
+    int handleIndex;
+
+    int priority;
+    SoundCategory category;
+
+    PlayingSoundCueState state = PlayingSoundCueState_NOT_PLAYING;
     ALuint source;
     std::size_t currentPlayingSoundIndex = 0;
     std::size_t currentWaitingForBufferSoundIndex = 0;
     SoundOption option;
     std::vector<std::shared_ptr<PlayingSound>> sounds;
+    std::shared_ptr<PlayingSound> interruptSound = nullptr;
 };
 
+void decodeSoundData(const std::shared_ptr<OggSoundData> & aData, unsigned int aMinSamples);
+void bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSound);
 
-//Should always return by value
-std::shared_ptr<OggSoundData> CreateData(const filesystem::path & path);
-std::shared_ptr<OggSoundData> CreateData(const std::shared_ptr<std::istream> & aInputStream, handy::StringId aSoundId);
+template<typename T>
+struct Handle
+{
+    Handle() :
+        mHandleIndex{-1},
+        mUniqueId{-1}
+    {}
+    Handle(const std::unique_ptr<T> & aCue) :
+        mHandleIndex{aCue->handleIndex},
+        mUniqueId{aCue->id}
+    {}
 
-std::shared_ptr<OggSoundData> CreateStreamedOggData(const filesystem::path & aPath);
-std::shared_ptr<OggSoundData> CreateStreamedOggData(const std::shared_ptr<std::istream> & aInputStream, handy::StringId aSoundId);
+    int mHandleIndex;
+    int mUniqueId;
 
-void decodeSoundData(const std::shared_ptr<OggSoundData> & aData);
+    bool operator<(const Handle<T> & rHs) const
+    {
+        return mHandleIndex < rHs.mHandleIndex;
+    }
+
+    bool operator==(const Handle<T> & rHs) const
+    {
+        return mHandleIndex == rHs.mHandleIndex && mUniqueId == rHs.mUniqueId;
+    }
+
+    T * toObject() const;
+};
+
+bool CmpHandlePriority(const Handle<PlayingSoundCue> & lhs, const Handle<PlayingSoundCue> & rhs);
+
+typedef std::vector<Handle<PlayingSoundCue>> PlayingSoundCueQueue;
 
 //There is three step to play sound
 //First load the file into RAM
@@ -181,36 +294,65 @@ void decodeSoundData(const std::shared_ptr<OggSoundData> & aData);
 class SoundManager
 {
     public:
-        SoundManager();
+        SoundManager(std::vector<SoundCategory> && aCategories);
         ~SoundManager();
 
-        void modifySound(ALuint aSource, SoundOption aOptions);
-        bool stopSound(ALuint aSource);
-        bool stopSound(handy::StringId aId);
-        bool pauseSound(ALuint aSource);
+        handy::StringId createData(const filesystem::path & aPath);
+        handy::StringId createData(const std::shared_ptr<std::istream> & aInputStream, handy::StringId aSoundId);
+
+        handy::StringId createStreamedOggData(const filesystem::path & aPath);
+        handy::StringId createStreamedOggData(const std::shared_ptr<std::istream> & aInputStream, handy::StringId aSoundId);
+
+        Handle<PlayingSoundCue> playSound(const Handle<SoundCue> & aSoundCue);
+
+        bool stopSound(const Handle<PlayingSoundCue> & aHandle);
+        void stopCategory(SoundCategory aSoundCategory);
+        void stopAllSound();
+
+        bool pauseSound(const Handle<PlayingSoundCue> & aHandle);
+        std::vector<Handle<PlayingSoundCue>> pauseCategory(SoundCategory aSoundCategory);
+        std::vector<Handle<PlayingSoundCue>> pauseAllSound();
+
+        bool startSound(const Handle<PlayingSoundCue> & aHandle);
+        void startCategory(SoundCategory aSoundCategory);
+        void startAllSound();
+
+        bool interruptSound(const Handle<PlayingSoundCue> & aHandle);
+
         ALint getSourceState(ALuint aSource);
-        void deleteSources(std::vector<ALuint> aSourcesToDelete);
-        void monitor();
-        CueHandle createSoundCue(const std::vector<handy::StringId> & aSoundList);
-        void bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSound);
-        void updateCue(const std::shared_ptr<PlayingSoundCue> & currentCue);
+        Handle<SoundCue> createSoundCue(
+                const std::vector<std::pair<handy::StringId, CueElementOption>> & aSoundList,
+                SoundCategory aCategory,
+                int priority,
+                const handy::StringId & aInterruptSoundId = handy::StringId::Null()
+                );
+
         void update();
-        void storeDataInLoadedSound(const std::shared_ptr<OggSoundData> & aSoundData);
-        std::shared_ptr<PlayingSoundCue> playSound(CueHandle aSoundCue);
+        void updateCue(PlayingSoundCue & currentCue, const Handle<PlayingSoundCue> & aHandle);
+        void monitor();
+
 
     private:
+        std::map<SoundCategory, PlayingSoundCueQueue> mCuesByCategories;
+        std::map<
+            SoundCategory, CategoryOption> mCategoryOptions;
+        std::map<Handle<SoundCue>, std::vector<Handle<PlayingSoundCue>>> mPlayingCuesByCue;
 
-        void storeCueInMap(CueHandle aHandle, const std::shared_ptr<SoundCue> & aSoundCue);
-
-        std::unordered_map<handy::StringId, std::shared_ptr<OggSoundData>> mLoadedSounds;
-        std::map<CueHandle, std::shared_ptr<SoundCue>> mCues;
-        std::list<std::shared_ptr<PlayingSoundCue>> mPlayingCues;
         ALCdevice * mOpenALDevice;
         ALCcontext * mOpenALContext;
         ALCboolean mContextIsCurrent;
-        std::array<ALuint, 16> sources;
-        std::vector<ALuint> freeSources;
-        std::size_t currentHandle = 0;
+
+        std::unordered_map<handy::StringId, std::shared_ptr<OggSoundData>> mLoadedSounds;
+
+        std::array<ALuint, MAX_SOURCES> mSources;
+        std::vector<std::size_t> mFreeSources;
+
+        std::size_t mCurrentCueId = 0;
+
 };
+
+inline std::map<Handle<SoundCue>, std::unique_ptr<SoundCue>> mCues;
+inline std::map<Handle<PlayingSoundCue>, std::unique_ptr<PlayingSoundCue>> mPlayingCues;
+
 } // namespace grapito
 } // namespace ad

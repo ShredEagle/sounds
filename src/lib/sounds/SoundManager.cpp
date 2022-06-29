@@ -18,63 +18,121 @@ namespace sounds {
 
 constexpr std::streamsize HEADER_BLOCK_SIZE = 8192;
 // Duration of music we want to extract from the stream (in s)
+constexpr float MINIMUM_DURATION_BUFFERED_ON_CREATION = 0.2f;
 constexpr float MINIMUM_DURATION_EXTRACTED = 3.f;
-constexpr float MINIMUM_DURATION_FOR_NON_STREAM = 10.f;
+constexpr float MAXIMUM_DURATION_FOR_NON_STREAM = 10.f;
 constexpr unsigned int SAMPLE_APPROXIMATION = 44100;
-constexpr unsigned int MAX_SAMPLES_FOR_NON_STREAM_DATA = MINIMUM_DURATION_FOR_NON_STREAM * SAMPLE_APPROXIMATION;
+constexpr unsigned int MAX_SAMPLES_FOR_NON_STREAM_DATA = MAXIMUM_DURATION_FOR_NON_STREAM * SAMPLE_APPROXIMATION;
+constexpr unsigned int MINIMUM_SAMPLE_BUFFERED_ON_CREATION = MINIMUM_DURATION_BUFFERED_ON_CREATION * SAMPLE_APPROXIMATION;
 constexpr unsigned int MINIMUM_SAMPLE_EXTRACTED = MINIMUM_DURATION_EXTRACTED * SAMPLE_APPROXIMATION;
 constexpr unsigned int READ_CHUNK_SIZE = 16384;
 constexpr std::array<ALenum, 3> SOUNDS_AL_FORMAT = {0, AL_FORMAT_MONO16, AL_FORMAT_STEREO16};
 constexpr std::array<ALenum, 3> STREAM_SOUNDS_AL_FORMAT = {0, AL_FORMAT_MONO_FLOAT32, AL_FORMAT_MONO_FLOAT32};
 
+template<>
+SoundCue * Handle<SoundCue>::toObject() const
+{
+    SoundCue * cue = mCues.at(*this).get();
 
-SoundManager::SoundManager():
-    mOpenALDevice{alcOpenDevice(nullptr)}
+    if (cue != nullptr && cue->id == mUniqueId)
+    {
+        return cue;
+    }
+
+    return nullptr;
+}
+
+template<>
+PlayingSoundCue * Handle<PlayingSoundCue>::toObject() const
+{
+    PlayingSoundCue * cue = mPlayingCues.at(*this).get();
+
+    if (cue != nullptr && cue->id == mUniqueId)
+    {
+        return cue;
+    }
+
+    return nullptr;
+}
+
+bool CmpHandlePriority(const Handle<PlayingSoundCue> & lhs, const Handle<PlayingSoundCue> & rhs)
+{
+    return lhs.toObject()->priority < rhs.toObject()->priority;
+}
+
+
+SoundManager::SoundManager(std::vector<SoundCategory> && aCategories):
+    mOpenALDevice{alcOpenDevice(nullptr)},
+    mOpenALContext{nullptr},
+    mContextIsCurrent{AL_FALSE},
+    mSources{}
 {
     if (!mOpenALDevice) {
         /* fail */
-        spdlog::get("grapito")->error("Cannot open OpenAL sound device");
+        spdlog::get("sounds")->error("Cannot open OpenAL sound device");
     } else {
         if (!alcCall(alcCreateContext, mOpenALContext, mOpenALDevice, mOpenALDevice,
                      nullptr)) {
-            spdlog::get("grapito")->error("Cannot create OpenAL context");
+            spdlog::get("sounds")->error("Cannot create OpenAL context");
         } else {
             if (!alcCall(alcMakeContextCurrent, mContextIsCurrent, mOpenALDevice,
                          mOpenALContext)) {
-                spdlog::get("grapito")->error("Cannot set OpenAL to current context");
+                spdlog::get("sounds")->error("Cannot set OpenAL to current context");
             }
         }
     }
 
+    alCall(alGenSources, MAX_SOURCES, mSources.data());
+
+    int i = 0;
+    for (ALuint source : mSources)
+    {
+        alCall(alSourcei, source, AL_SOURCE_RELATIVE, AL_TRUE);
+        mFreeSources.push_back(i++);
+    }
+
     alCall(alListener3f, AL_POSITION, 0.f, 0.f, 0.f);
+
+    mCategoryOptions.insert({MASTER_SOUND_CATEGORY, {}});
+
+    for (int category : aCategories)
+    {
+        if (category == MASTER_SOUND_CATEGORY)
+        {
+            spdlog::get("sounds")->error("Can't add a category in place of MASTER_SOUND_CATEGORY ({})", MASTER_SOUND_CATEGORY);
+        }
+
+        mCuesByCategories.insert({category, {}});
+        mCategoryOptions.insert({category, {}});
+    }
 }
 
 SoundManager::~SoundManager()
 {
     if (mContextIsCurrent) {
         if (!alcCall(alcMakeContextCurrent, mContextIsCurrent, mOpenALDevice, nullptr)) {
-            spdlog::get("grapito")->error("Well we're leaking audio memory now");
+            spdlog::get("sounds")->error("Well we're leaking audio memory now");
         }
 
         if (!alcCall(alcDestroyContext, mOpenALDevice, mOpenALContext)) {
-            spdlog::get("grapito")->error("Well we're leaking audio memory now");
+            spdlog::get("sounds")->error("Well we're leaking audio memory now");
         }
 
         ALCboolean closed;
         if (!alcCall(alcCloseDevice, closed, mOpenALDevice, mOpenALDevice)) {
-            spdlog::get("grapito")->error("Device just disappeared and I don't know why");
+            spdlog::get("sounds")->error("Device just disappeared and I don't know why");
         }
     }
 }
 
-std::shared_ptr<OggSoundData> CreateData(const filesystem::path & aPath)
+handy::StringId SoundManager::createData(const filesystem::path & aPath)
 {
     std::shared_ptr<std::ifstream> soundStream = std::make_shared<std::ifstream>(aPath.string(), std::ios::binary);
     handy::StringId soundStringId{aPath.stem().string()};
-    return CreateData(soundStream, soundStringId);
+    return createData(soundStream, soundStringId);
 }
 
-std::shared_ptr<OggSoundData> CreateData(const std::shared_ptr<std::istream> & aInputStream, const handy::StringId aSoundId)
+handy::StringId SoundManager::createData(const std::shared_ptr<std::istream> & aInputStream, const handy::StringId aSoundId)
 {
     std::istreambuf_iterator<char> it{*aInputStream}, end;
     std::vector<std::uint8_t> data{it, end};
@@ -86,7 +144,7 @@ std::shared_ptr<OggSoundData> CreateData(const std::shared_ptr<std::istream> & a
 
     if (vorbisInfo.channels == 2)
     {
-        spdlog::get("sounds")->warn("Do not load sound stereo sound without streaming. Only PointSound source should be loaded using CreatePointSound and PointSound cannot be stereo.");
+        spdlog::get("sounds")->warn("Do not load stereo sound without streaming. Only mono source should be loaded using CreatePointSound and PointSound cannot be stereo.");
     }
 
     float decoded[MAX_SAMPLES_FOR_NON_STREAM_DATA];
@@ -122,11 +180,13 @@ std::shared_ptr<OggSoundData> CreateData(const std::shared_ptr<std::istream> & a
 
     spdlog::get("sounds")->info("Samples: {}, total used bytes: {}, Elapsed time: {}, length decoded: {}", samplesRead, resultSoundData->usedData, diff.count(), resultSoundData->lengthDecoded * resultSoundData->vorbisInfo.channels);
 
-    return resultSoundData;
+    mLoadedSounds.insert({resultSoundData->soundId, resultSoundData});
+
+    return resultSoundData->soundId;
 }
 
 //Streamed version of ogg data
-std::shared_ptr<OggSoundData> CreateStreamedOggData(const filesystem::path & aPath)
+handy::StringId SoundManager::createStreamedOggData(const filesystem::path & aPath)
 {
     const std::shared_ptr<std::ifstream> soundStream = std::make_shared<std::ifstream>(aPath.string(), std::ios::binary);
     if (soundStream->fail())
@@ -134,9 +194,9 @@ std::shared_ptr<OggSoundData> CreateStreamedOggData(const filesystem::path & aPa
         spdlog::get("sounds")->error("File {} does not exists", aPath.string());
     }
     handy::StringId soundStringId{aPath.stem().string()};
-    return CreateStreamedOggData(soundStream, soundStringId);
+    return createStreamedOggData(soundStream, soundStringId);
 }
-std::shared_ptr<OggSoundData> CreateStreamedOggData(const std::shared_ptr<std::istream> & aInputStream, handy::StringId aSoundId)
+handy::StringId SoundManager::createStreamedOggData(const std::shared_ptr<std::istream> & aInputStream, handy::StringId aSoundId)
 {
     int used = 0;
     int error = 0;
@@ -167,11 +227,8 @@ std::shared_ptr<OggSoundData> CreateStreamedOggData(const std::shared_ptr<std::i
             } else {
                 spdlog::get("sounds")->error(
                     "Stb vorbis error while opening pushdata decoder: {}", error);
-                return std::make_shared<OggSoundData>(OggSoundData{
-                    .soundId = aSoundId,
-                    .dataStream = aInputStream,
-                    .vorbisData = {nullptr, &stb_vorbis_close},
-                });
+
+                return handy::StringId::Null();
             }
         }
     }
@@ -197,10 +254,12 @@ std::shared_ptr<OggSoundData> CreateStreamedOggData(const std::shared_ptr<std::i
         .sampleRate = info.sample_rate,
     });
 
-    return resultSoundData;
+    mLoadedSounds.insert({resultSoundData->soundId, resultSoundData});
+
+    return resultSoundData->soundId;
 }
 
-void decodeSoundData(const std::shared_ptr<OggSoundData> & aData)
+void decodeSoundData(const std::shared_ptr<OggSoundData> & aData, unsigned int aMinSamples = MINIMUM_SAMPLE_EXTRACTED)
 {
     stb_vorbis * vorbisData = aData->vorbisData;
 
@@ -214,7 +273,7 @@ void decodeSoundData(const std::shared_ptr<OggSoundData> & aData)
     int samplesRead = 0;
 
     std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-    while (samplesRead < MINIMUM_SAMPLE_EXTRACTED) {
+    while (samplesRead < static_cast<int>(aMinSamples)) {
         int currentUsed = -1;
 
         while (currentUsed != 0)
@@ -242,8 +301,6 @@ void decodeSoundData(const std::shared_ptr<OggSoundData> & aData)
                 }
             }
         }
-
-        //TODO signal fullyDecoded
 
         if (!aData->fullyRead)
         {
@@ -278,11 +335,6 @@ void decodeSoundData(const std::shared_ptr<OggSoundData> & aData)
 }
 
 
-void SoundManager::storeCueInMap(CueHandle aHandle, const std::shared_ptr<SoundCue> & aSoundCue)
-{
-    mCues.insert({aHandle, aSoundCue});
-}
-
 ALint SoundManager::getSourceState(ALuint aSource)
 {
     ALint sourceState;
@@ -290,25 +342,38 @@ ALint SoundManager::getSourceState(ALuint aSource)
     return sourceState;
 }
 
-void SoundManager::deleteSources(std::vector<ALuint> aSourcesToDelete)
-{
-    alCall(alDeleteSources, aSourcesToDelete.size(), aSourcesToDelete.data());
-}
-
 void SoundManager::update()
 {
-    for (auto & currentCue : mPlayingCues)
+    spdlog::get("sounds")->info("# free sources: {}", mFreeSources.size());
+    int realPlayingSound = 0;
+    for (auto & [handle, sound] : mPlayingCues)
     {
-        if (currentCue->state != SoundCueState_NOT_PLAYING)
+        if (sound.get() != nullptr)
         {
-            updateCue(currentCue);
+            realPlayingSound++;
+        }
+    }
+
+    spdlog::get("sounds")->info("# playing sound: {}", realPlayingSound);
+    spdlog::get("sounds")->info("# number of prioriry queue: {}", mCuesByCategories.size());
+
+    for (auto & [cat, queue] : mCuesByCategories)
+    {
+        spdlog::get("sounds")->info("# number sound in priority queue {}: {}", cat, queue.size());
+    }
+
+    for (const auto & [handle, currentCue] : mPlayingCues)
+    {
+        if (currentCue != nullptr && currentCue->state != PlayingSoundCueState_NOT_PLAYING)
+        {
+            updateCue(*currentCue, handle);
         }
     }
 }
 
 void SoundManager::monitor()
 {
-    for (auto currentCue : mPlayingCues)
+    for (const auto & [handle, currentCue] : mPlayingCues)
     {
         ALint sourceState;
         alCall(alGetSourcei, currentCue->source, AL_SOURCE_STATE, &sourceState);
@@ -316,49 +381,203 @@ void SoundManager::monitor()
     }
 }
 
-void SoundManager::modifySound(ALuint aSource, SoundOption aOptions)
+bool SoundManager::interruptSound(const Handle<PlayingSoundCue> & aHandle)
 {
-    alCall(alSourcef, aSource, AL_GAIN, aOptions.gain);
-    //alCall(alSource3f, aSource, AL_POSITION, aOptions.position.x(), aOptions.position.y(),
-    //       aOptions.position.z());
-    //alCall(alSource3f, aSource, AL_VELOCITY, aOptions.velocity.x(), aOptions.velocity.y(),
-    //       aOptions.velocity.z());
-    //alCall(alSourcei, aSource, AL_LOOPING, aOptions.looping);
-}
+    PlayingSoundCue * cue = aHandle.toObject();
+    if (cue != nullptr)
+    {
+        if (cue->interruptSound != nullptr)
+        {
+            //Free buffer of waiting and pending sound
+            std::shared_ptr<PlayingSound> waitingSound = cue->getWaitingSound();
+            waitingSound->stagedBuffers.resize(0);
+            waitingSound->freeBuffers.assign(waitingSound->buffers.begin(), waitingSound->buffers.end());
+            std::shared_ptr<PlayingSound> playingSound = cue->getPlayingSound();
+            playingSound->stagedBuffers.resize(0);
+            playingSound->freeBuffers.assign(waitingSound->buffers.begin(), waitingSound->buffers.end());
 
-bool SoundManager::stopSound(ALuint aSource) { return alCall(alSourceStop, aSource); }
+            cue->state = PlayingSoundCueState_INTERRUPTED;
+            std::shared_ptr<PlayingSound> sound = cue->interruptSound;
+            std::shared_ptr<OggSoundData> data = sound->soundData;
+            if (data->lengthDecoded < sound->positionInData + MINIMUM_SAMPLE_BUFFERED_ON_CREATION && !data->fullyDecoded)
+            {
+                decodeSoundData(data, MINIMUM_SAMPLE_BUFFERED_ON_CREATION);
+            }
+            bufferPlayingSound(sound);
+            //Stop source to swap buffer
+            alCall(alSourceStop, cue->source);
+            //Clean buffer queue to avoid processing of interrupted sound
+            alCall(alSourcei, cue->source, AL_BUFFER, NULL);
+            alCall(alSourceQueueBuffers, cue->source, 1, sound->stagedBuffers.data());
+            return alCall(alSourcePlay, cue->source);
 
-bool SoundManager::stopSound(handy::StringId /*aId*/)
-{
-    //if (mStoredSources.contains(aId)) {
-    //    ALuint source = mStoredSources.at(aId);
-    //    mStoredSources.erase(aId);
-    //    return alCall(alSourceStop, source);
-    //}
+            sound->stagedBuffers.erase(sound->stagedBuffers.begin());
+            if (sound->stagedBuffers.size() > 0)
+            {
+                alCall(alSourceQueueBuffers, cue->source, sound->stagedBuffers.size(), sound->stagedBuffers.data());
+            }
+        }
+        else
+        {
+            return stopSound(aHandle);
+        }
+    }
+
     return false;
 }
 
-bool SoundManager::pauseSound(ALuint aSource) { return alCall(alSourcePause, aSource); }
-
-void SoundManager::storeDataInLoadedSound(const std::shared_ptr<OggSoundData> & aSoundData)
+bool SoundManager::stopSound(const Handle<PlayingSoundCue> & aHandle)
 {
-    mLoadedSounds.insert({aSoundData->soundId, aSoundData});
+
+    PlayingSoundCue * cue = aHandle.toObject();
+
+    if (cue != nullptr)
+    {
+        PlayingSoundCueQueue & cueQueue = mCuesByCategories.at(cue->category);
+        std::erase(cueQueue, aHandle);
+        std::make_heap(cueQueue.begin(), cueQueue.end(), CmpHandlePriority);
+
+        for (std::size_t i = 0; i < mSources.size(); i++)
+        {
+            if (mSources.at(i) == cue->source)
+            {
+                mFreeSources.push_back(i);
+                break;
+            }
+        }
+
+
+        bool result = alCall(alSourceStop, cue->source);
+        alCall(alSourcei, cue->source, AL_BUFFER, NULL);
+        mPlayingCues.at(aHandle) = nullptr;
+        return result;
+    }
+
+    return false;
 }
 
-
-CueHandle SoundManager::createSoundCue(const std::vector<handy::StringId> & aSoundList)
+void SoundManager::stopCategory(SoundCategory aSoundCategory)
 {
-    std::shared_ptr<SoundCue> soundCue = std::make_shared<SoundCue>();
+    const PlayingSoundCueQueue & soundQueue = mCuesByCategories.at(aSoundCategory);
+
+    for (const Handle<PlayingSoundCue> & handle : soundQueue)
+    {
+        stopSound(handle);
+    }
+}
+
+void SoundManager::stopAllSound()
+{
+    for (const auto & [handle, sound]: mPlayingCues)
+    {
+        stopSound(handle);
+    }
+}
+
+bool SoundManager::pauseSound(const Handle<PlayingSoundCue> & aHandle) {
+    PlayingSoundCue * cue = aHandle.toObject();
+    if (cue != nullptr)
+    {
+        return alCall(alSourcePause, cue->source);
+    }
+
+    return false;
+}
+
+std::vector<Handle<PlayingSoundCue>> SoundManager::pauseCategory(SoundCategory aSoundCategory)
+{
+    std::vector<Handle<PlayingSoundCue>> result;
+    const PlayingSoundCueQueue & soundQueue = mCuesByCategories.at(aSoundCategory);
+
+    for (const Handle<PlayingSoundCue> & handle : soundQueue)
+    {
+        if(pauseSound(handle))
+        {
+            result.push_back(handle);
+        }
+    }
+
+    return result;
+}
+
+std::vector<Handle<PlayingSoundCue>> SoundManager::pauseAllSound()
+{
+    std::vector<Handle<PlayingSoundCue>> result;
+
+    for (const auto & [handle, sound]: mPlayingCues)
+    {
+        if(pauseSound(handle))
+        {
+            result.push_back(handle);
+        }
+    }
+
+    return result;
+}
+
+bool SoundManager::startSound(const Handle<PlayingSoundCue> & aHandle)
+{
+    PlayingSoundCue * cue = aHandle.toObject();
+
+    if (cue != nullptr)
+    {
+        return alCall(alSourcePlay, cue->source);
+    }
+
+    return false;
+}
+
+void SoundManager::startCategory(SoundCategory aSoundCategory)
+{
+    const PlayingSoundCueQueue & soundQueue = mCuesByCategories.at(aSoundCategory);
+
+    for (const Handle<PlayingSoundCue> & handle : soundQueue)
+    {
+        startSound(handle);
+    }
+}
+
+void SoundManager::startAllSound()
+{
+    for (const auto & [handle, sound]: mPlayingCues)
+    {
+        startSound(handle);
+    }
+}
+
+Handle<SoundCue> SoundManager::createSoundCue(
+        const std::vector<std::pair<handy::StringId, CueElementOption>> & aSoundList,
+        SoundCategory aCategory,
+        int aPriority,
+        const handy::StringId & aInterruptSoundId
+        )
+{
+    std::size_t handleIndex = 0;
+    for (const auto & [handle, cue] : mCues)
+    {
+        if (cue == nullptr)
+        {
+            break;
+        }
+        handleIndex++;
+    }
+
+    std::unique_ptr<SoundCue> soundCue = std::make_unique<SoundCue>(
+            mCurrentCueId++,
+            handleIndex,
+            aCategory,
+            aPriority
+            );
     int channels = 0;
 
-    for (auto soundId : aSoundList)
+    for (auto [soundId, option] : aSoundList)
     {
         std::shared_ptr<OggSoundData> soundData = mLoadedSounds.at(soundId);
         if (channels == 0 || channels == soundData->vorbisInfo.channels)
         {
             channels = soundData->vorbisInfo.channels;
 
-            soundCue->sounds.push_back(soundData);
+            soundCue->sounds.push_back({soundData, option});
         }
         else
         {
@@ -366,29 +585,93 @@ CueHandle SoundManager::createSoundCue(const std::vector<handy::StringId> & aSou
         }
     }
 
-    currentHandle += 1;
+    if (aInterruptSoundId != handy::StringId::Null())
+    {
+        std::shared_ptr<OggSoundData> interruptSoundData = mLoadedSounds.at(aInterruptSoundId);
+        if (channels == 0 || channels == interruptSoundData->vorbisInfo.channels)
+        {
+            soundCue->interruptSound = interruptSoundData;
+        }
+        else
+        {
+            spdlog::get("sounds")->error("Cannot add sounds of different format on a cue");
+        }
+    }
 
-    storeCueInMap(CueHandle{currentHandle}, soundCue);
+    Handle<SoundCue> handle{soundCue};
+    mCues.insert_or_assign(handle, std::move(soundCue));
+    mPlayingCuesByCue.insert_or_assign(handle, std::vector<Handle<PlayingSoundCue>>{});
 
-    return {currentHandle};
+    return handle;
 }
 
-std::shared_ptr<PlayingSoundCue> SoundManager::playSound(CueHandle aHandle)
+Handle<PlayingSoundCue> SoundManager::playSound(const Handle<SoundCue> & aHandle)
 {
-    std::shared_ptr<SoundCue> soundCue = mCues.at(aHandle);
-    std::shared_ptr<PlayingSoundCue> playingCue = std::make_shared<PlayingSoundCue>(soundCue);
+    SoundCue & soundCue = *mCues.at(aHandle);
 
-    mPlayingCues.push_back(playingCue);
+    PlayingSoundCueQueue & priorityQueue = mCuesByCategories.at(soundCue.category);
+
+    std::vector<Handle<PlayingSoundCue>> & alreadyPlayingCue = mPlayingCuesByCue.at(aHandle);
+
+    if (alreadyPlayingCue.size() == MAX_SOURCE_PER_CUE)
+    {
+        spdlog::get("sounds")->trace("Not playing because too much already");
+        return Handle<PlayingSoundCue>();
+
+        //TODO(franz): here we should try to remove the less loud sound including the new
+    }
+
+    if (mFreeSources.size() == 0) [[unlikely]]
+    {
+        if(!priorityQueue.empty())
+        {
+            std::pop_heap(priorityQueue.begin(), priorityQueue.end(), CmpHandlePriority);
+            Handle<PlayingSoundCue> lessPriorizedHandle = priorityQueue.back();
+
+            PlayingSoundCue * lessPriorizedCue = lessPriorizedHandle.toObject();
+
+            if (lessPriorizedCue->priority <= soundCue.priority)
+            {
+                return Handle<PlayingSoundCue>();
+            }
+
+            if (lessPriorizedHandle.mHandleIndex >= 0)
+            {
+                stopSound(lessPriorizedHandle);
+            }
+        }
+        else
+        {
+            return Handle<PlayingSoundCue>();
+        }
+
+    }
+
+    std::size_t sourceIndex = mFreeSources.back();
+    mFreeSources.pop_back();
+    ALuint source = mSources.at(sourceIndex);
+
+    std::size_t handleIndex = 0;
+    for (auto & [handle, cue] : mPlayingCues)
+    {
+        if (cue == nullptr)
+        {
+            break;
+        }
+        handleIndex++;
+    }
+
+    std::unique_ptr<PlayingSoundCue> playingCue = std::make_unique<PlayingSoundCue>(soundCue, source, mCurrentCueId++, handleIndex);
 
     std::shared_ptr<PlayingSound> sound = playingCue->sounds[playingCue->currentPlayingSoundIndex];
     std::shared_ptr<OggSoundData> data = sound->soundData;
 
-    if (data->lengthDecoded < sound->positionInData + MINIMUM_SAMPLE_EXTRACTED && !data->fullyDecoded)
+    if (data->lengthDecoded < sound->positionInData + MINIMUM_SAMPLE_BUFFERED_ON_CREATION && !data->fullyDecoded)
     {
-        decodeSoundData(data);
+        decodeSoundData(data, MINIMUM_SAMPLE_BUFFERED_ON_CREATION);
     }
 
-    playingCue->state = SoundCueState_PLAYING;
+    playingCue->state = PlayingSoundCueState_PLAYING;
     sound->state = PlayingSoundState_PLAYING;
     bufferPlayingSound(sound);
     alCall(alSourceQueueBuffers, playingCue->source, sound->stagedBuffers.size(), sound->stagedBuffers.data());
@@ -396,13 +679,20 @@ std::shared_ptr<PlayingSoundCue> SoundManager::playSound(CueHandle aHandle)
     //empty staged buffers
     sound->stagedBuffers.resize(0);
 
-    alCall(alSourcef, playingCue->source, AL_GAIN, 10.f);
     alCall(alSourcePlay, playingCue->source);
 
-    return playingCue;
+    Handle<PlayingSoundCue> handle{playingCue};
+    mPlayingCues.insert_or_assign(handle, std::move(playingCue));
+
+    priorityQueue.push_back(handle);
+    std::push_heap(priorityQueue.begin(), priorityQueue.end(), CmpHandlePriority);
+
+    alreadyPlayingCue.push_back(handle);
+
+    return handle;
 }
 
-void SoundManager::bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSound)
+void bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSound)
 {
     std::list<ALuint> & freeBuffers = aSound->freeBuffers;
     std::shared_ptr<OggSoundData> data = aSound->soundData;
@@ -416,10 +706,10 @@ void SoundManager::bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSou
 
         if (data->streamedData)
         {
-        nextPositionInData = std::min(
-                static_cast<std::size_t>(data->lengthDecoded),
-                aSound->positionInData + static_cast<std::size_t>(MINIMUM_SAMPLE_EXTRACTED) * data->vorbisInfo.channels
-                );
+            nextPositionInData = std::min(
+                    static_cast<std::size_t>(data->lengthDecoded),
+                    aSound->positionInData + static_cast<std::size_t>(MINIMUM_SAMPLE_EXTRACTED) * data->vorbisInfo.channels
+                    );
         }
         else
         {
@@ -433,8 +723,6 @@ void SoundManager::bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSou
                 nextPositionInData - aSound->positionInData
                 );
 
-        //This is fucked because
-        //However for it to work we need at least 2 buffer to be free
         alCall(
                 alBufferData,
                 freeBuf,
@@ -450,18 +738,24 @@ void SoundManager::bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSou
 
         if (nextPositionInData == data->lengthDecoded && data->fullyDecoded)
         {
-            aSound->state = PlayingSoundState_STALE;
+            if (aSound->loops == 0)
+            {
+                aSound->state = PlayingSoundState_STALE;
+            }
+            else
+            {
+                aSound->loops--;
+                aSound->positionInData = 0;
+            }
         }
     }
 }
 
-void SoundManager::updateCue(const std::shared_ptr<PlayingSoundCue> & currentCue)
+void SoundManager::updateCue(PlayingSoundCue & currentCue, const Handle<PlayingSoundCue> & aHandle)
 {
-    std::size_t currentWaitingForBufferSoundIndex = currentCue->currentWaitingForBufferSoundIndex;
+    std::shared_ptr<PlayingSound> sound = currentCue.getWaitingSound();
 
-    std::shared_ptr<PlayingSound> sound = currentCue->sounds[currentWaitingForBufferSoundIndex];
-
-    ALuint source = currentCue->source;
+    ALuint source = currentCue.source;
 
     int bufferProcessed = 0;
     alCall(alGetSourceiv, source, AL_BUFFERS_PROCESSED, &bufferProcessed);
@@ -469,9 +763,13 @@ void SoundManager::updateCue(const std::shared_ptr<PlayingSoundCue> & currentCue
     std::list<ALuint> & freeBuffers = sound->freeBuffers;
 
     //updating position and velocity
-    SoundOption option = currentCue->option;
+    SoundOption option = currentCue.option;
     alCall(alSource3f, source, AL_POSITION, option.position.x(), option.position.y(), option.position.z());
     alCall(alSource3f, source, AL_VELOCITY, option.velocity.x(), option.velocity.y(), option.velocity.z());
+
+    CategoryOption catOption = mCategoryOptions.at(currentCue.category);
+    CategoryOption masterOption = mCategoryOptions.at(MASTER_SOUND_CATEGORY);
+    alCall(alSourcef, source, AL_GAIN, option.gain * catOption.userGain * catOption.gameGain * masterOption.userGain * masterOption.gameGain);
 
     //add used buffer to freeBuffers list
     if (bufferProcessed > 0)
@@ -483,36 +781,24 @@ void SoundManager::updateCue(const std::shared_ptr<PlayingSoundCue> & currentCue
         if (sound->state == PlayingSoundState_STALE && freeBuffers.size() == sound->buffers.size())
         {
             sound->state = PlayingSoundState_FINISHED;
-            currentWaitingForBufferSoundIndex++;
         }
     }
 
-    if (sound->state == PlayingSoundState_FINISHED &&
-            currentCue->sounds.size() == ++currentCue->currentWaitingForBufferSoundIndex)
+    if (sound->state == PlayingSoundState_FINISHED)
     {
-        currentCue->state = SoundCueState_NOT_PLAYING;
+        currentCue.state = PlayingSoundCueState_NOT_PLAYING;
+
+        stopSound(aHandle);
+        return;
     }
 
-    if (currentCue->state == SoundCueState_PLAYING)
+    if (currentCue.state == PlayingSoundCueState_PLAYING)
     {
-        sound = currentCue->sounds[currentCue->currentPlayingSoundIndex];
-
-        if (sound->state == PlayingSoundState_STALE)
-        {
-            if (currentCue->sounds.size() == ++currentCue->currentPlayingSoundIndex)
-            {
-                currentCue->state = SoundCueState_STALE;
-            }
-            else
-            {
-                sound = currentCue->sounds[currentCue->currentPlayingSoundIndex];
-                sound->state = PlayingSoundState_PLAYING;
-            }
-        }
+        sound = currentCue.getPlayingSound();
 
         std::shared_ptr<OggSoundData> data = sound->soundData;
 
-        if (currentCue->state == SoundCueState_PLAYING)
+        if (currentCue.state == PlayingSoundCueState_PLAYING)
         {
             //if (!data->fullyDecoded)
             if (data->lengthDecoded < sound->positionInData + MINIMUM_SAMPLE_EXTRACTED && !data->fullyDecoded)
@@ -525,7 +811,7 @@ void SoundManager::updateCue(const std::shared_ptr<PlayingSoundCue> & currentCue
                 bufferPlayingSound(sound);
             }
 
-            alCall(alSourceQueueBuffers, currentCue->source, sound->stagedBuffers.size(), sound->stagedBuffers.data());
+            alCall(alSourceQueueBuffers, currentCue.source, sound->stagedBuffers.size(), sound->stagedBuffers.data());
 
             //empty staged buffers
             sound->stagedBuffers.resize(0);
