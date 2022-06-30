@@ -47,7 +47,10 @@ int main()
     /*         ); */
 
     ad::sounds::Handle<ad::sounds::SoundCue> machineGun = manager.createSoundCue(
-            {{ahouaismonocourt, {100}}},
+            {
+            {ahouaismonocourt, {1}},
+            {ahouaismono, {1}}
+            },
             SoundCategory_Music,
             ad::sounds::HIGHEST_PRIORITY,
             ahouaismono

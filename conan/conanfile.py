@@ -29,7 +29,10 @@ class SoundsConan(ConanFile):
         ("openal/1.21.1"),
         ("zlib/1.2.12"),
         ("stb/cci.20210910"),
+        ("imgui/1.87"),
+        ("implot/0.13"),
 
+        ("graphics/2d7d5f5479@adnn/develop"),
         ("handy/aeb7e759ba@adnn/develop"),
         ("math/08118a6f2c@adnn/develop"),
     )
@@ -76,6 +79,16 @@ class SoundsConan(ConanFile):
 
     def generate(self):
            self._generate_cmake_configfile()
+
+
+    def imports(self):
+        # see: https://blog.conan.io/2019/06/26/An-introduction-to-the-Dear-ImGui-library.html
+        # the imgui package is designed this way: consumer has to import desired backends.
+        self.copy("imgui_impl_glfw.cpp",         src="./res/bindings", dst=path.join(self.folders.build, "conan_imports/imgui_backends"))
+        self.copy("imgui_impl_opengl3.cpp",      src="./res/bindings", dst=path.join(self.folders.build, "conan_imports/imgui_backends"))
+        self.copy("imgui_impl_glfw.h",           src="./res/bindings", dst=path.join(self.folders.build, "conan_imports/imgui_backends"))
+        self.copy("imgui_impl_opengl3.h",        src="./res/bindings", dst=path.join(self.folders.build, "conan_imports/imgui_backends"))
+        self.copy("imgui_impl_opengl3_loader.h", src="./res/bindings", dst=path.join(self.folders.build, "conan_imports/imgui_backends"))
 
 
     def build(self):

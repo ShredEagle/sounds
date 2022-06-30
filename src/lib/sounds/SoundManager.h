@@ -12,6 +12,7 @@
 #include <math/Vector.h>
 #include <handy/Guard.h>
 #include <handy/StringId.h>
+#include <handy/StringId_Interning.h>
 
 #include <AL/al.h>
 #include <AL/alc.h>
@@ -221,19 +222,6 @@ struct PlayingSoundCue
 
         std::shared_ptr<PlayingSound> sound = sounds[currentPlayingSoundIndex];
 
-        if (sound->state == PlayingSoundState_STALE)
-        {
-            if (sounds.size() == ++currentPlayingSoundIndex)
-            {
-                state = PlayingSoundCueState_STALE;
-            }
-            else
-            {
-                sound = sounds[currentPlayingSoundIndex];
-                sound->state = PlayingSoundState_PLAYING;
-            }
-        }
-
         return sound;
     }
 
@@ -287,6 +275,14 @@ bool CmpHandlePriority(const Handle<PlayingSoundCue> & lhs, const Handle<Playing
 
 typedef std::vector<Handle<PlayingSoundCue>> PlayingSoundCueQueue;
 
+struct SoundManagerInfo
+{
+    const std::map<Handle<PlayingSoundCue>, std::unique_ptr<PlayingSoundCue>> & playingCues;
+    const std::array<ALuint, MAX_SOURCES> & sources;
+    const std::vector<std::size_t> & freeSources;
+    const std::unordered_map<handy::StringId, std::shared_ptr<OggSoundData>> & loadedSounds;
+};
+
 //There is three step to play sound
 //First load the file into RAM
 //Second load the audio data into audio memory
@@ -331,6 +327,8 @@ class SoundManager
         void updateCue(PlayingSoundCue & currentCue, const Handle<PlayingSoundCue> & aHandle);
         void monitor();
 
+        const SoundManagerInfo getInfo();
+
 
     private:
         std::map<SoundCategory, PlayingSoundCueQueue> mCuesByCategories;
@@ -348,7 +346,6 @@ class SoundManager
         std::vector<std::size_t> mFreeSources;
 
         std::size_t mCurrentCueId = 0;
-
 };
 
 inline std::map<Handle<SoundCue>, std::unique_ptr<SoundCue>> mCues;

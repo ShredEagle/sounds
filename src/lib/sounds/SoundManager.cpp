@@ -19,13 +19,13 @@ namespace sounds {
 constexpr std::streamsize HEADER_BLOCK_SIZE = 8192;
 // Duration of music we want to extract from the stream (in s)
 constexpr float MINIMUM_DURATION_BUFFERED_ON_CREATION = 0.2f;
-constexpr float MINIMUM_DURATION_EXTRACTED = 3.f;
+constexpr float MINIMUM_DURATION_EXTRACTED = 0.5f;
 constexpr float MAXIMUM_DURATION_FOR_NON_STREAM = 10.f;
 constexpr unsigned int SAMPLE_APPROXIMATION = 44100;
 constexpr unsigned int MAX_SAMPLES_FOR_NON_STREAM_DATA = MAXIMUM_DURATION_FOR_NON_STREAM * SAMPLE_APPROXIMATION;
 constexpr unsigned int MINIMUM_SAMPLE_BUFFERED_ON_CREATION = MINIMUM_DURATION_BUFFERED_ON_CREATION * SAMPLE_APPROXIMATION;
 constexpr unsigned int MINIMUM_SAMPLE_EXTRACTED = MINIMUM_DURATION_EXTRACTED * SAMPLE_APPROXIMATION;
-constexpr unsigned int READ_CHUNK_SIZE = 16384;
+constexpr unsigned int READ_CHUNK_SIZE = 16384.f * MINIMUM_DURATION_EXTRACTED * 2.f;
 constexpr std::array<ALenum, 3> SOUNDS_AL_FORMAT = {0, AL_FORMAT_MONO16, AL_FORMAT_STEREO16};
 constexpr std::array<ALenum, 3> STREAM_SOUNDS_AL_FORMAT = {0, AL_FORMAT_MONO_FLOAT32, AL_FORMAT_MONO_FLOAT32};
 
@@ -128,18 +128,20 @@ SoundManager::~SoundManager()
 handy::StringId SoundManager::createData(const filesystem::path & aPath)
 {
     std::shared_ptr<std::ifstream> soundStream = std::make_shared<std::ifstream>(aPath.string(), std::ios::binary);
-    handy::StringId soundStringId{aPath.stem().string()};
+    handy::StringId soundStringId = ad::handy::internalizeString(aPath.stem().string());
     return createData(soundStream, soundStringId);
 }
 
-handy::StringId SoundManager::createData(const std::shared_ptr<std::istream> & aInputStream, const handy::StringId aSoundId)
+handy::StringId SoundManager::createData(
+        const std::shared_ptr<std::istream> & aInputStream, handy::StringId aSoundId)
 {
     std::istreambuf_iterator<char> it{*aInputStream}, end;
     std::vector<std::uint8_t> data{it, end};
     int error = 0;
 
     std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-    stb_vorbis * vorbisData = stb_vorbis_open_memory(data.data(), static_cast<int>(data.size()), &error, nullptr);
+    stb_vorbis * vorbisData = stb_vorbis_open_memory(
+            data.data(), static_cast<int>(data.size()), &error, nullptr);
     stb_vorbis_info vorbisInfo = stb_vorbis_get_info(vorbisData);
 
     if (vorbisInfo.channels == 2)
@@ -148,7 +150,8 @@ handy::StringId SoundManager::createData(const std::shared_ptr<std::istream> & a
     }
 
     float decoded[MAX_SAMPLES_FOR_NON_STREAM_DATA];
-    int samplesRead = stb_vorbis_get_samples_float_interleaved(vorbisData, vorbisInfo.channels, decoded, MAX_SAMPLES_FOR_NON_STREAM_DATA);
+    int samplesRead = stb_vorbis_get_samples_float_interleaved(
+            vorbisData, vorbisInfo.channels, decoded, MAX_SAMPLES_FOR_NON_STREAM_DATA);
 
     if (samplesRead == MAX_SAMPLES_FOR_NON_STREAM_DATA)
     {
@@ -193,10 +196,12 @@ handy::StringId SoundManager::createStreamedOggData(const filesystem::path & aPa
     {
         spdlog::get("sounds")->error("File {} does not exists", aPath.string());
     }
-    handy::StringId soundStringId{aPath.stem().string()};
+    handy::StringId soundStringId = ad::handy::internalizeString(aPath.stem().string());
     return createStreamedOggData(soundStream, soundStringId);
 }
-handy::StringId SoundManager::createStreamedOggData(const std::shared_ptr<std::istream> & aInputStream, handy::StringId aSoundId)
+
+handy::StringId SoundManager::createStreamedOggData(
+        const std::shared_ptr<std::istream> & aInputStream, handy::StringId aSoundId)
 {
     int used = 0;
     int error = 0;
@@ -212,8 +217,9 @@ handy::StringId SoundManager::createStreamedOggData(const std::shared_ptr<std::i
 
     while (vorbisData == nullptr) {
         vorbisData =
-            stb_vorbis_open_pushdata(reinterpret_cast<unsigned char *>(headerData.data()),
-                                     headerData.size(), &used, &error, nullptr);
+            stb_vorbis_open_pushdata(
+                    reinterpret_cast<unsigned char *>(headerData.data()),
+                    headerData.size(), &used, &error, nullptr);
 
         if (vorbisData == nullptr) {
             if (error == VORBIS_need_more_data) [[likely]] {
@@ -259,7 +265,9 @@ handy::StringId SoundManager::createStreamedOggData(const std::shared_ptr<std::i
     return resultSoundData->soundId;
 }
 
-void decodeSoundData(const std::shared_ptr<OggSoundData> & aData, unsigned int aMinSamples = MINIMUM_SAMPLE_EXTRACTED)
+void decodeSoundData(
+        const std::shared_ptr<OggSoundData> & aData,
+        unsigned int aMinSamples = MINIMUM_SAMPLE_EXTRACTED)
 {
     stb_vorbis * vorbisData = aData->vorbisData;
 
@@ -282,7 +290,8 @@ void decodeSoundData(const std::shared_ptr<OggSoundData> & aData, unsigned int a
 
             currentUsed = stb_vorbis_decode_frame_pushdata(
                 vorbisData, reinterpret_cast<unsigned char *>(soundData.data() + used),
-                static_cast<int>(soundData.size()) - used, &channels, &output, &passSampleRead);
+                static_cast<int>(soundData.size()) - used,
+                &channels, &output, &passSampleRead);
 
             used += currentUsed;
 
@@ -292,12 +301,17 @@ void decodeSoundData(const std::shared_ptr<OggSoundData> & aData, unsigned int a
             {
                 if (channels == 2)
                 {
-                    std::vector<float> interleavedData = interleave(output[0], output[1], passSampleRead);
-                    aData->decodedData.insert(aData->decodedData.end(), interleavedData.begin(), interleavedData.end());
+                    std::vector<float> interleavedData = interleave(
+                            output[0], output[1], passSampleRead);
+                    aData->decodedData.insert(
+                            aData->decodedData.end(),
+                            interleavedData.begin(), interleavedData.end());
                 }
                 else
                 {
-                    aData->decodedData.insert(aData->decodedData.end(), &output[0][0], &output[0][passSampleRead]);
+                    aData->decodedData.insert(
+                            aData->decodedData.end(),
+                            &output[0][0], &output[0][passSampleRead]);
                 }
             }
         }
@@ -306,8 +320,10 @@ void decodeSoundData(const std::shared_ptr<OggSoundData> & aData, unsigned int a
         {
             std::array<char, READ_CHUNK_SIZE> moreHeaderData;
             inputStream.read(moreHeaderData.data(), READ_CHUNK_SIZE);
-            soundData.insert(soundData.end(), moreHeaderData.begin(), moreHeaderData.end());
+            soundData.insert(
+                    soundData.end(), moreHeaderData.begin(), moreHeaderData.end());
             std::streamsize lengthRead = inputStream.gcount();
+            spdlog::get("sounds")->info("Reading new chunk from {} to {}", aData->lengthRead, aData->lengthRead + lengthRead);
             aData->lengthRead += lengthRead;
 
             if (lengthRead < READ_CHUNK_SIZE)
@@ -344,7 +360,7 @@ ALint SoundManager::getSourceState(ALuint aSource)
 
 void SoundManager::update()
 {
-    spdlog::get("sounds")->info("# free sources: {}", mFreeSources.size());
+    spdlog::get("sounds")->trace("# free sources: {}", mFreeSources.size());
     int realPlayingSound = 0;
     for (auto & [handle, sound] : mPlayingCues)
     {
@@ -354,12 +370,12 @@ void SoundManager::update()
         }
     }
 
-    spdlog::get("sounds")->info("# playing sound: {}", realPlayingSound);
-    spdlog::get("sounds")->info("# number of prioriry queue: {}", mCuesByCategories.size());
+    spdlog::get("sounds")->trace("# playing sound: {}", realPlayingSound);
+    spdlog::get("sounds")->trace("# number of prioriry queue: {}", mCuesByCategories.size());
 
     for (auto & [cat, queue] : mCuesByCategories)
     {
-        spdlog::get("sounds")->info("# number sound in priority queue {}: {}", cat, queue.size());
+        spdlog::get("sounds")->trace("# number sound in priority queue {}: {}", cat, queue.size());
     }
 
     for (const auto & [handle, currentCue] : mPlayingCues)
@@ -448,6 +464,7 @@ bool SoundManager::stopSound(const Handle<PlayingSoundCue> & aHandle)
 
 
         bool result = alCall(alSourceStop, cue->source);
+        spdlog::get("sounds")->info("source stopped: {}", cue->source);
         alCall(alSourcei, cue->source, AL_BUFFER, NULL);
         mPlayingCues.at(aHandle) = nullptr;
         return result;
@@ -781,6 +798,11 @@ void SoundManager::updateCue(PlayingSoundCue & currentCue, const Handle<PlayingS
         if (sound->state == PlayingSoundState_STALE && freeBuffers.size() == sound->buffers.size())
         {
             sound->state = PlayingSoundState_FINISHED;
+            currentCue.currentWaitingForBufferSoundIndex++;
+            if (currentCue.currentWaitingForBufferSoundIndex < currentCue.sounds.size())
+            {
+                sound = currentCue.getWaitingSound();
+            }
         }
     }
 
@@ -796,11 +818,24 @@ void SoundManager::updateCue(PlayingSoundCue & currentCue, const Handle<PlayingS
     {
         sound = currentCue.getPlayingSound();
 
+        if (sound->state == PlayingSoundState_STALE)
+        {
+            if (currentCue.sounds.size() == currentCue.currentPlayingSoundIndex + 1)
+            {
+                currentCue.state = PlayingSoundCueState_STALE;
+            }
+            else
+            {
+                sound = currentCue.sounds[++currentCue.currentPlayingSoundIndex];
+                sound->state = PlayingSoundState_PLAYING;
+            }
+        }
+
+
         std::shared_ptr<OggSoundData> data = sound->soundData;
 
         if (currentCue.state == PlayingSoundCueState_PLAYING)
         {
-            //if (!data->fullyDecoded)
             if (data->lengthDecoded < sound->positionInData + MINIMUM_SAMPLE_EXTRACTED && !data->fullyDecoded)
             {
                 decodeSoundData(data);
@@ -811,12 +846,23 @@ void SoundManager::updateCue(PlayingSoundCue & currentCue, const Handle<PlayingS
                 bufferPlayingSound(sound);
             }
 
+            spdlog::get("sounds")->info("source loaded: {}", currentCue.source);
             alCall(alSourceQueueBuffers, currentCue.source, sound->stagedBuffers.size(), sound->stagedBuffers.data());
 
             //empty staged buffers
             sound->stagedBuffers.resize(0);
         }
     }
+}
+
+const SoundManagerInfo SoundManager::getInfo()
+{
+    return {
+        mPlayingCues,
+        mSources,
+        mFreeSources,
+        mLoadedSounds,
+    };
 }
 
 } // namespace sounds
