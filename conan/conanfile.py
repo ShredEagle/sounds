@@ -33,8 +33,8 @@ class SoundsConan(ConanFile):
         ("implot/0.13"),
 
         ("graphics/2d7d5f5479@adnn/develop"),
-        ("handy/aeb7e759ba@adnn/develop"),
-        ("math/08118a6f2c@adnn/develop"),
+        ("handy/4ecfa5b125@adnn/develop"),
+        ("math/f140b4368f@adnn/develop"),
     )
 
     build_policy = "missing"
