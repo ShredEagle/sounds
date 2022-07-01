@@ -1,11 +1,13 @@
 set(TARGET_NAME sounds)
 
 set(${TARGET_NAME}_HEADERS
+    stb_vorbis.h
     SoundManager.h
     SoundUtilities.h
 )
 
 set(${TARGET_NAME}_SOURCES
+    stb_vorbis.c
     SoundManager.cpp
     SoundUtilities.cpp
 )
@@ -36,6 +38,14 @@ cmc_target_current_include_directory(${TARGET_NAME})
 
 cmc_find_dependencies(FILE CMakeFinds.cmake.in)
 
+#target_compile_options(${TARGET_NAME}
+#    PRIVATE "-O2")
+
+target_compile_options(${TARGET_NAME}
+    PRIVATE "-g" "-fsanitize=leak" "-Wall" "-Wextra" "-fsanitize=address" "-fsanitize=undefined")
+target_link_options(${TARGET_NAME}
+    PRIVATE "-fsanitize=address" "-fsanitize=leak" "-fsanitize=undefined")
+
 target_link_libraries(${TARGET_NAME}
     PUBLIC
         ad::math
@@ -44,7 +54,6 @@ target_link_libraries(${TARGET_NAME}
 
         spdlog::spdlog
         OpenAL::OpenAL
-        Vorbis::vorbisfile
 )
 
 ##

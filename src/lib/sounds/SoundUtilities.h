@@ -6,6 +6,8 @@
 #include <AL/al.h>
 #include <AL/alc.h>
 
+#include <chrono>
+#include <thread>
 #include <cstdint>
 #include <iostream>
 #include <string>

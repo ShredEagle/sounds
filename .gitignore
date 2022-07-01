@@ -11,6 +11,7 @@
 /conan/test_package/build/
 /conan/graph_info.json
 CMakeUserPresets.json
+conan_imports_manifest.txt
 
 # Clang tooling #
 .clangd/
