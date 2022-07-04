@@ -26,8 +26,7 @@ constexpr unsigned int MAX_SAMPLES_FOR_NON_STREAM_DATA = MAXIMUM_DURATION_FOR_NO
 constexpr unsigned int MINIMUM_SAMPLE_BUFFERED_ON_CREATION = MINIMUM_DURATION_BUFFERED_ON_CREATION * SAMPLE_APPROXIMATION;
 constexpr unsigned int MINIMUM_SAMPLE_EXTRACTED = MINIMUM_DURATION_EXTRACTED * SAMPLE_APPROXIMATION;
 constexpr unsigned int READ_CHUNK_SIZE = 16384.f * MINIMUM_DURATION_EXTRACTED * 2.f;
-constexpr std::array<ALenum, 3> SOUNDS_AL_FORMAT = {0, AL_FORMAT_MONO16, AL_FORMAT_STEREO16};
-constexpr std::array<ALenum, 3> STREAM_SOUNDS_AL_FORMAT = {0, AL_FORMAT_MONO_FLOAT32, AL_FORMAT_MONO_FLOAT32};
+constexpr std::array<ALenum, 3> SOUNDS_AL_FORMAT = {0, AL_FORMAT_MONO_FLOAT32, AL_FORMAT_MONO_FLOAT32};
 
 template<>
 SoundCue * Handle<SoundCue>::toObject() const
@@ -255,7 +254,7 @@ handy::StringId SoundManager::createStreamedOggData(
         .vorbisData = {vorbisData, &stb_vorbis_close},
         .vorbisInfo = info,
         .fullyDecoded = false,
-        .dataFormat = STREAM_SOUNDS_AL_FORMAT[info.channels],
+        .dataFormat = SOUNDS_AL_FORMAT[info.channels],
         .streamedData = true,
         .sampleRate = info.sample_rate,
     });
@@ -464,7 +463,6 @@ bool SoundManager::stopSound(const Handle<PlayingSoundCue> & aHandle)
 
 
         bool result = alCall(alSourceStop, cue->source);
-        spdlog::get("sounds")->info("source stopped: {}", cue->source);
         alCall(alSourcei, cue->source, AL_BUFFER, NULL);
         mPlayingCues.at(aHandle) = nullptr;
         return result;
@@ -743,7 +741,7 @@ void bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSound)
         alCall(
                 alBufferData,
                 freeBuf,
-                data->vorbisInfo.channels == 1 ? AL_FORMAT_MONO_FLOAT32 : AL_FORMAT_STEREO_FLOAT32,
+                SOUNDS_AL_FORMAT[data->vorbisInfo.channels],
                 data->decodedData.data() + aSound->positionInData,
                 sizeof(float) * (nextPositionInData - aSound->positionInData),
                 data->vorbisInfo.sample_rate
@@ -786,7 +784,12 @@ void SoundManager::updateCue(PlayingSoundCue & currentCue, const Handle<PlayingS
 
     CategoryOption catOption = mCategoryOptions.at(currentCue.category);
     CategoryOption masterOption = mCategoryOptions.at(MASTER_SOUND_CATEGORY);
-    alCall(alSourcef, source, AL_GAIN, option.gain * catOption.userGain * catOption.gameGain * masterOption.userGain * masterOption.gameGain);
+    alCall(
+            alSourcef,
+            source,
+            AL_GAIN,
+            option.gain * catOption.userGain * catOption.gameGain * masterOption.userGain * masterOption.gameGain
+            );
 
     //add used buffer to freeBuffers list
     if (bufferProcessed > 0)
@@ -846,7 +849,6 @@ void SoundManager::updateCue(PlayingSoundCue & currentCue, const Handle<PlayingS
                 bufferPlayingSound(sound);
             }
 
-            spdlog::get("sounds")->info("source loaded: {}", currentCue.source);
             alCall(alSourceQueueBuffers, currentCue.source, sound->stagedBuffers.size(), sound->stagedBuffers.data());
 
             //empty staged buffers

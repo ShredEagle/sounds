@@ -16,7 +16,6 @@ ImGuiIO & initializeImgui(GLFWwindow * aWindow)
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImPlot::CreateContext();
     ImGuiIO & io = ImGui::GetIO();
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
@@ -32,7 +31,6 @@ void terminateImgui()
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
-    ImPlot::DestroyContext();
     ImGui::DestroyContext();
 }
 
@@ -71,6 +69,7 @@ int main()
     static bool newSelection{false};
 
     initializeImgui(application.getGlfwWindow());
+    ImPlot::CreateContext();
 
     while (application.nextFrame()) {
 
@@ -271,5 +270,6 @@ int main()
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     }
 
+    ImPlot::DestroyContext();
     terminateImgui();
 }

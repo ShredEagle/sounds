@@ -42,9 +42,12 @@ cmc_find_dependencies(FILE CMakeFinds.cmake.in)
 #    PRIVATE "-O2")
 
 target_compile_options(${TARGET_NAME}
-    PRIVATE "-g" "-fsanitize=leak" "-Wall" "-Wextra" "-fsanitize=address" "-fsanitize=undefined")
-target_link_options(${TARGET_NAME}
-    PRIVATE "-fsanitize=address" "-fsanitize=leak" "-fsanitize=undefined")
+     PRIVATE "-O2" "--save-temps")
+
+# target_compile_options(${TARGET_NAME}
+#     PRIVATE "-g" "-fsanitize=leak" "-Wall" "-Wextra" "-fsanitize=address" "-fsanitize=undefined")
+# target_link_options(${TARGET_NAME}
+#     PRIVATE "-fsanitize=address" "-fsanitize=leak" "-fsanitize=undefined")
 
 target_link_libraries(${TARGET_NAME}
     PUBLIC
