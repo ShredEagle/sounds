@@ -1,0 +1,3 @@
+@find_package@(Sounds CONFIG @REQUIRED@ COMPONENTS sounds)
+@find_package@(imgui @REQUIRED@ CONFIG)
+@find_package@(implot @REQUIRED@ CONFIG)

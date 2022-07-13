@@ -1,4 +1,5 @@
 add_subdirectory(lib/sounds)
+add_subdirectory(lib/soundui)
 
 option(BUILD_tests "Build the test applications" ON)
 if(BUILD_tests)

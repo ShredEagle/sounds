@@ -770,7 +770,7 @@ void SoundManager::updateCue(PlayingSoundCue & currentCue, const Handle<PlayingS
 {
     std::shared_ptr<PlayingSound> sound = currentCue.getWaitingSound();
 
-    ALuint source = currentCue.source;
+    const ALuint source = currentCue.source;
 
     int bufferProcessed = 0;
     alCall(alGetSourceiv, source, AL_BUFFERS_PROCESSED, &bufferProcessed);
@@ -778,12 +778,12 @@ void SoundManager::updateCue(PlayingSoundCue & currentCue, const Handle<PlayingS
     std::list<ALuint> & freeBuffers = sound->freeBuffers;
 
     //updating position and velocity
-    SoundOption option = currentCue.option;
+    const SoundOption option = currentCue.option;
     alCall(alSource3f, source, AL_POSITION, option.position.x(), option.position.y(), option.position.z());
     alCall(alSource3f, source, AL_VELOCITY, option.velocity.x(), option.velocity.y(), option.velocity.z());
 
-    CategoryOption catOption = mCategoryOptions.at(currentCue.category);
-    CategoryOption masterOption = mCategoryOptions.at(MASTER_SOUND_CATEGORY);
+    const CategoryOption catOption = mCategoryOptions.at(currentCue.category);
+    const CategoryOption masterOption = mCategoryOptions.at(MASTER_SOUND_CATEGORY);
     alCall(
             alSourcef,
             source,
@@ -857,7 +857,7 @@ void SoundManager::updateCue(PlayingSoundCue & currentCue, const Handle<PlayingS
     }
 }
 
-const SoundManagerInfo SoundManager::getInfo()
+const SoundManagerInfo SoundManager::getInfo() const
 {
     return {
         mPlayingCues,

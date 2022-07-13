@@ -203,7 +203,7 @@ struct PlayingSoundCue
         }
     }
 
-    std::shared_ptr<PlayingSound> getWaitingSound()
+    std::shared_ptr<PlayingSound> getWaitingSound() const
     {
         if (state == PlayingSoundCueState_INTERRUPTED)
         {
@@ -213,7 +213,7 @@ struct PlayingSoundCue
         return sounds[currentWaitingForBufferSoundIndex];
     }
 
-    std::shared_ptr<PlayingSound> getPlayingSound()
+    std::shared_ptr<PlayingSound> getPlayingSound() const
     {
         if (state == PlayingSoundCueState_INTERRUPTED)
         {
@@ -327,7 +327,7 @@ class SoundManager
         void updateCue(PlayingSoundCue & currentCue, const Handle<PlayingSoundCue> & aHandle);
         void monitor();
 
-        const SoundManagerInfo getInfo();
+        const SoundManagerInfo getInfo() const;
 
 
     private:

@@ -1,15 +1,11 @@
-set(TARGET_NAME sounds)
+set(TARGET_NAME soundui)
 
 set(${TARGET_NAME}_HEADERS
-    stb_vorbis.h
-    SoundManager.h
-    SoundUtilities.h
+    SoundUi.h
 )
 
 set(${TARGET_NAME}_SOURCES
-    stb_vorbis.c
-    SoundManager.cpp
-    SoundUtilities.cpp
+    SoundUi.cpp
 )
 
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR}
@@ -50,12 +46,10 @@ cmc_find_dependencies(FILE CMakeFinds.cmake.in)
 #     PRIVATE "-fsanitize=address" "-fsanitize=leak" "-fsanitize=undefined")
 
 target_link_libraries(${TARGET_NAME}
-    PUBLIC
-        ad::math
-        ad::resource
-        ad::handy
-        spdlog::spdlog
-        OpenAL::OpenAL
+    PRIVATE
+    ad::sounds
+    imgui::imgui
+    implot::implot
 )
 
 ##

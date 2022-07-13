@@ -7,54 +7,40 @@ set(${TARGET_NAME}_HEADERS
 set(${TARGET_NAME}_SOURCES
 )
 
-set(${TARGET_NAME}_IMGUI_BACKENDS
-    ${PROJECT_BINARY_DIR}/conan_imports/imgui_backends/imgui_impl_glfw.cpp
-    ${PROJECT_BINARY_DIR}/conan_imports/imgui_backends/imgui_impl_opengl3.cpp
-    ${PROJECT_BINARY_DIR}/conan_imports/imgui_backends/imgui_impl_glfw.h
-    ${PROJECT_BINARY_DIR}/conan_imports/imgui_backends/imgui_impl_opengl3.h
-    ${PROJECT_BINARY_DIR}/conan_imports/imgui_backends/imgui_impl_opengl3_loader.h
-)
-
 add_executable(${TARGET_NAME}
     main.cpp
     ${${TARGET_NAME}_SOURCES}
     ${${TARGET_NAME}_HEADERS}
-    ${${TARGET_NAME}_IMGUI_BACKENDS}
 )
 
-target_include_directories(${TARGET_NAME}
-    PRIVATE
-        ${PROJECT_BINARY_DIR}/conan_imports
-)
-
-find_package(imgui REQUIRED)
-find_package(implot REQUIRED)
-
-find_package(Graphics CONFIG REQUIRED COMPONENTS graphics)
+find_package(Sounds CONFIG REQUIRED COMPONENTS sounds soundui)
 find_package(Math CONFIG REQUIRED COMPONENTS math)
+find_package(Graphics CONFIG REQUIRED COMPONENTS graphics imguiui)
+find_package(implot REQUIRED)
+find_package(spdlog REQUIRED)
 
 
 #target_compile_options(${TARGET_NAME}
 #    PRIVATE "-O2")
 
-target_compile_options(${TARGET_NAME}
-     PRIVATE "-O2" "--save-temps")
+#target_compile_options(${TARGET_NAME}
+#     PRIVATE "-O2" "--save-temps")
 
 # target_compile_options(${TARGET_NAME}
 #      PRIVATE "-g" "-fsanitize=leak" "-Wall" "-Wextra" "-fsanitize=address" "-fsanitize=undefined" "--target=x86_64-unknown-unknown" "-S")
 # target_link_options(${TARGET_NAME}
 #      PRIVATE "-fsanitize=address" "-fsanitize=leak" "-fsanitize=undefined")
 
-find_package(spdlog REQUIRED)
 
 target_link_libraries(${TARGET_NAME}
-    PRIVATE
+    PUBLIC
         ad::sounds
+        ad::soundui
         ad::math
         ad::graphics
+        ad::imguiui
 
         spdlog::spdlog
-        imgui::imgui
         implot::implot
 )
 
