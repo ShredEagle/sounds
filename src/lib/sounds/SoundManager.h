@@ -40,6 +40,7 @@ namespace sounds {
  * - Threaded decoding
  * - Threaded mixing
  * - Threaded feeding to openal
+ * - Display position in debug ui
  */
 
 enum PlayingSoundState
