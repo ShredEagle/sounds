@@ -24,11 +24,11 @@ int main()
     spdlog::get("sounds")->set_level(spdlog::level::info);
     ad::sounds::SoundManager manager{{SoundCategory_SFX, SoundCategory_Music, SoundCategory_Dialog}};
 
-    ad::handy::StringId testId = manager.createStreamedOggData("test.ogg");
-    ad::handy::StringId testmono = manager.createStreamedOggData("testmono.ogg");
+    /*ad::handy::StringId testId =*/ manager.createStreamedOggData("test.ogg");
+    /*ad::handy::StringId testmono =*/ manager.createStreamedOggData("testmono.ogg");
     ad::handy::StringId ahouaismono = manager.createData("ahouaismono.ogg");
     ad::handy::StringId ahouaismonocourt = manager.createData("ahouaismonocourt.ogg");
-    ad::handy::StringId ahouais = manager.createStreamedOggData("ahouais.ogg");
+    /*ad::handy::StringId ahouais =*/ manager.createStreamedOggData("ahouais.ogg");
     /* ad::sounds::Handle<ad::sounds::SoundCue> testHandle = manager.createSoundCue( */
     /*         {{ahouaismono, {3}}}, */
     /*         SoundCategory_Music, */

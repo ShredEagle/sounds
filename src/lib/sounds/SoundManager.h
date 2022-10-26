@@ -24,6 +24,7 @@
 #include <queue>
 #include <string>
 #include <vector>
+#include <list>
 
 #define TEMPORARY
 
