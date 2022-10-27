@@ -28,11 +28,12 @@ class SoundsConan(ConanFile):
         ("openal/1.22.2"),
         ("zlib/1.2.12"),
         ("stb/cci.20210910"),
-        ("implot/0.13"),
+        ("implot/0.14"),
+        ("imgui/1.88"),
 
-        ("graphics/8a162f896f@adnn/develop"),
-        ("handy/35f0a507af@adnn/develop"),
-        ("math/662cc47fad@adnn/develop"),
+        ("graphics/ac8af9d688@adnn/develop"),
+        ("handy/acd90c0549@adnn/develop"),
+        ("math/3d5a576c1e@adnn/develop"),
     )
 
     build_policy = "missing"
