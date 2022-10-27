@@ -1,3 +1,5 @@
+include(cmc-cpp)
+
 add_subdirectory(lib/sounds)
 add_subdirectory(lib/soundui)
 

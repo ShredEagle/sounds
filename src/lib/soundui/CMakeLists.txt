@@ -27,6 +27,8 @@ add_custom_target(${TARGET_NAME}_IDE
 
 cmc_target_current_include_directory(${TARGET_NAME})
 
+cmc_cpp_all_warnings_as_errors(${TARGET_NAME})
+
 
 ##
 ## Dependencies
