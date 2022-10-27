@@ -7,7 +7,6 @@ namespace ad {
 namespace sounds {
 
 constexpr int SOURCE_RECT_SIZE = 20;
-constexpr int SOURCE_RECT_GUTTER = 5;
 constexpr int MAX_SAMPLE_DRAWN = 10000;
 
 void DisplaySoundUi(const SoundManagerInfo & managerInfo)
@@ -32,10 +31,7 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
                 int y = p.y;
 
                 char popupName[32];
-                sprintf(popupName, "source popup %lu", i);
-                bool closePopup = false;
 
-                ImVec2 position = ImGui::GetCursorScreenPos();
                 if (std::find(managerInfo.freeSources.begin(),
                               managerInfo.freeSources.end(), i)
                     == managerInfo.freeSources.end()) {
@@ -153,8 +149,8 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
                 {
                     ImPlot::SetupAxes(
                             NULL, NULL,
-                            newSelection ? ImPlotAxisFlags_AutoFit : 0 | ImPlotAxisFlags_NoDecorations ^ ImPlotAxisFlags_NoGridLines,
-                            ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_NoDecorations ^ ImPlotAxisFlags_NoGridLines);
+                            newSelection ? ImPlotAxisFlags_AutoFit : 0 | (ImPlotAxisFlags_NoDecorations ^ ImPlotAxisFlags_NoGridLines),
+                            ImPlotAxisFlags_AutoFit | (ImPlotAxisFlags_NoDecorations ^ ImPlotAxisFlags_NoGridLines));
                     ImPlot::PlotLine("", sound->decodedData.data(),
                                      sound->decodedData.size());
                     newSelection = false;
@@ -176,7 +172,6 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
 
                     ImVec2 rmin = ImPlot::PlotToPixels(ImPlotPoint(0.f, -1.f));
                     ImVec2 rmax = ImPlot::PlotToPixels(ImPlotPoint(plotLengthOfReadData, 1.f));
-                    float hline[1] = {plotLengthOfReadData};
                     ImPlot::PushPlotClipRect();
                     ImPlot::GetPlotDrawList()->AddRectFilled(rmin, rmax, ImColor(1.f, 0.6f, 0.1f, 0.2f));
                     ImPlot::GetPlotDrawList()->AddRect(rmin, rmax, ImColor(1.f, 0.6f, 0.1f, 0.8f));
