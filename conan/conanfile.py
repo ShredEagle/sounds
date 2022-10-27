@@ -31,7 +31,7 @@ class SoundsConan(ConanFile):
         ("implot/0.14"),
         ("imgui/1.88"),
 
-        ("graphics/ac8af9d688@adnn/develop"),
+        ("graphics/50f44b43b0@adnn/develop"),
         ("handy/acd90c0549@adnn/develop"),
         ("math/3d5a576c1e@adnn/develop"),
     )
