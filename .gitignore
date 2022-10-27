@@ -8,10 +8,13 @@
 /conan/test_package/build/
 
 # Conan
-/conan/test_package/build/
 /conan/graph_info.json
 CMakeUserPresets.json
 conan_imports_manifest.txt
+conan.lock
+conanbuildinfo.txt
+conaninfo.txt
+graph_info.json
 
 # Clang tooling #
 .clangd/
