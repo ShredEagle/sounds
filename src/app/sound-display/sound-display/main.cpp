@@ -46,12 +46,14 @@ int main()
 
         const ad::sounds::SoundManagerInfo managerInfo = manager.getInfo();
 
+        glClear(GL_COLOR_BUFFER_BIT);
         a.newFrame();
 
         ad::sounds::DisplaySoundUi(managerInfo);
         //ImGui::ShowDemoWindow();
         //ImPlot::ShowDemoWindow();
         a.render();
+        a.renderBackend();
     }
 
     ImPlot::DestroyContext();
