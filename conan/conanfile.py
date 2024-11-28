@@ -24,16 +24,16 @@ class SoundsConan(ConanFile):
     }
 
     requires = (
-        ("spdlog/1.9.2"),
+        ("spdlog/1.13.0"),
         ("openal/1.22.2"),
-        ("zlib/1.2.12"),
+        ("zlib/1.3"),
         ("stb/cci.20230920"),
-        ("implot/0.14"),
-        ("imgui/1.88"),
+        ("implot/0.16"),
+        ("imgui/1.89.8"),
 
-        ("graphics/50f44b43b0@adnn/develop"),
-        ("handy/acd90c0549@adnn/develop"),
-        ("math/3d5a576c1e@adnn/develop"),
+        ("graphics/826ea9d282@adnn/develop"),
+        ("handy/e2b164a804@adnn/develop"),
+        ("math/8c49b882e7@adnn/develop"),
     )
 
     build_policy = "missing"
