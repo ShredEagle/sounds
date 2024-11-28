@@ -20,7 +20,7 @@ constexpr std::streamsize HEADER_BLOCK_SIZE = 8192;
 // Duration of music we want to extract from the stream (in s)
 constexpr float MINIMUM_DURATION_BUFFERED_ON_CREATION = 0.2f;
 constexpr float MINIMUM_DURATION_EXTRACTED = 0.5f;
-constexpr float MAXIMUM_DURATION_FOR_NON_STREAM = 10.f;
+constexpr float MAXIMUM_DURATION_FOR_NON_STREAM = 5.f;
 constexpr unsigned int SAMPLE_APPROXIMATION = 44100;
 constexpr unsigned int MAX_SAMPLES_FOR_NON_STREAM_DATA = unsigned int(MAXIMUM_DURATION_FOR_NON_STREAM * SAMPLE_APPROXIMATION + 0.5f);
 constexpr unsigned int MINIMUM_SAMPLE_BUFFERED_ON_CREATION = unsigned int(MINIMUM_DURATION_BUFFERED_ON_CREATION * SAMPLE_APPROXIMATION + 0.5f);
@@ -126,7 +126,11 @@ SoundManager::~SoundManager()
 
 handy::StringId SoundManager::createData(const filesystem::path & aPath)
 {
-    std::shared_ptr<std::ifstream> soundStream = std::make_shared<std::ifstream>(aPath.string(), std::ios::binary);
+    const std::shared_ptr<std::ifstream> soundStream = std::make_shared<std::ifstream>(aPath.string(), std::ios::binary);
+    if (soundStream->fail())
+    {
+        spdlog::get("sounds")->error("File {} does not exists", aPath.string());
+    }
     handy::StringId soundStringId = ad::handy::internalizeString(aPath.stem().string());
     return createData(soundStream, soundStringId);
 }
