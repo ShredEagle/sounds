@@ -32,6 +32,9 @@ add_custom_target(${TARGET_NAME}_IDE
 cmc_target_current_include_directory(${TARGET_NAME})
 cmc_cpp_all_warnings_as_errors(${TARGET_NAME})
 
+if (MSVC)
+    target_compile_options(${TARGET_NAME} PRIVATE /wd4820)
+endif()
 
 ##
 ## Dependencies
