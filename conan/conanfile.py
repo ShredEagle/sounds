@@ -27,7 +27,7 @@ class SoundsConan(ConanFile):
         ("spdlog/1.9.2"),
         ("openal/1.22.2"),
         ("zlib/1.2.12"),
-        ("stb/cci.20210910"),
+        ("stb/cci.20230920"),
         ("implot/0.14"),
         ("imgui/1.88"),
 
