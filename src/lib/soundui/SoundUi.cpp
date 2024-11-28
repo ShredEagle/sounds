@@ -27,8 +27,8 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
             for (std::size_t i = 0; i < managerInfo.sources.size(); i++) {
                 const ImVec2 p = ImGui::GetCursorScreenPos();
                 int size = SOURCE_RECT_SIZE;
-                int x = p.x;
-                int y = p.y;
+                float x = p.x;
+                float y = p.y;
 
                 char popupName[32];
 
@@ -105,9 +105,9 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
             static ad::handy::StringId selectedSound{
                 managerInfo.loadedSounds.begin()->first};
             for (auto [stringId, sound] : managerInfo.loadedSounds) {
-                char label[64];
-                sprintf(label, "%s", ad::handy::revertStringId(stringId).c_str());
-                if (ImGui::Selectable(label, selectedSound == stringId)) {
+                if (ImGui::Selectable(ad::handy::revertStringId(stringId).c_str(),
+                                      selectedSound == stringId)) 
+                {
                     if (selectedSound != stringId)
                     {
                         newSelection = true;
@@ -152,7 +152,7 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
                             newSelection ? ImPlotAxisFlags_AutoFit : 0 | (ImPlotAxisFlags_NoDecorations ^ ImPlotAxisFlags_NoGridLines),
                             ImPlotAxisFlags_AutoFit | (ImPlotAxisFlags_NoDecorations ^ ImPlotAxisFlags_NoGridLines));
                     ImPlot::PlotLine("", sound->decodedData.data(),
-                                     sound->decodedData.size());
+                                     (int)sound->decodedData.size());
                     newSelection = false;
                 }
                 else
@@ -160,8 +160,8 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
                     ImPlot::SetupAxes(
                             NULL, NULL, ImPlotAxisFlags_NoDecorations ^ ImPlotAxisFlags_NoGridLines,  ImPlotAxisFlags_NoDecorations ^ ImPlotAxisFlags_NoGridLines);
 
-                    int sampleDrawn = sound->decodedData.size();
-                    int realSampleDrawn = std::min((std::size_t)MAX_SAMPLE_DRAWN, sound->decodedData.size());
+                    int sampleDrawn = (int)sound->decodedData.size();
+                    int realSampleDrawn = (int)std::min((std::size_t)MAX_SAMPLE_DRAWN, sound->decodedData.size());
                     sampleDrawn = std::max(0, sampleDrawn - (sampleDrawn % realSampleDrawn));
                     int sampleStride = sampleDrawn / realSampleDrawn;
 

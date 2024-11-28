@@ -70,7 +70,7 @@ typedef int SoundCategory;
 constexpr int MASTER_SOUND_CATEGORY = -1;
 constexpr int HIGHEST_PRIORITY = -1;
 constexpr int BUFFER_PER_CHANNEL = 5;
-constexpr std::size_t MAX_SOURCES = 5;
+constexpr ALsizei MAX_SOURCES = 5;
 const std::size_t MAX_SOURCE_PER_CUE = 3;
 
 template<typename T>
@@ -347,7 +347,7 @@ class SoundManager
         std::array<ALuint, MAX_SOURCES> mSources;
         std::vector<std::size_t> mFreeSources;
 
-        std::size_t mCurrentCueId = 0;
+        int mCurrentCueId = 0;
 };
 
 inline std::map<Handle<SoundCue>, std::unique_ptr<SoundCue>> mCues;

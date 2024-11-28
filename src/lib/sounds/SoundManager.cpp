@@ -22,10 +22,10 @@ constexpr float MINIMUM_DURATION_BUFFERED_ON_CREATION = 0.2f;
 constexpr float MINIMUM_DURATION_EXTRACTED = 0.5f;
 constexpr float MAXIMUM_DURATION_FOR_NON_STREAM = 10.f;
 constexpr unsigned int SAMPLE_APPROXIMATION = 44100;
-constexpr unsigned int MAX_SAMPLES_FOR_NON_STREAM_DATA = MAXIMUM_DURATION_FOR_NON_STREAM * SAMPLE_APPROXIMATION;
-constexpr unsigned int MINIMUM_SAMPLE_BUFFERED_ON_CREATION = MINIMUM_DURATION_BUFFERED_ON_CREATION * SAMPLE_APPROXIMATION;
-constexpr unsigned int MINIMUM_SAMPLE_EXTRACTED = MINIMUM_DURATION_EXTRACTED * SAMPLE_APPROXIMATION;
-constexpr unsigned int READ_CHUNK_SIZE = 16384.f * MINIMUM_DURATION_EXTRACTED * 2.f;
+constexpr unsigned int MAX_SAMPLES_FOR_NON_STREAM_DATA = unsigned int(MAXIMUM_DURATION_FOR_NON_STREAM * SAMPLE_APPROXIMATION + 0.5f);
+constexpr unsigned int MINIMUM_SAMPLE_BUFFERED_ON_CREATION = unsigned int(MINIMUM_DURATION_BUFFERED_ON_CREATION * SAMPLE_APPROXIMATION + 0.5f);
+constexpr unsigned int MINIMUM_SAMPLE_EXTRACTED = unsigned int(MINIMUM_DURATION_EXTRACTED * SAMPLE_APPROXIMATION + 0.5f);
+constexpr unsigned int READ_CHUNK_SIZE = unsigned int(16384 * MINIMUM_DURATION_EXTRACTED * 2 + 0.5f);
 constexpr std::array<ALenum, 3> SOUNDS_AL_FORMAT = {0, AL_FORMAT_MONO_FLOAT32, AL_FORMAT_MONO_FLOAT32};
 
 template<>
@@ -218,7 +218,7 @@ handy::StringId SoundManager::createStreamedOggData(
         vorbisData =
             stb_vorbis_open_pushdata(
                     reinterpret_cast<unsigned char *>(headerData.data()),
-                    headerData.size(), &used, &error, nullptr);
+                    (int)headerData.size(), &used, &error, nullptr);
 
         if (vorbisData == nullptr) {
             if (error == VORBIS_need_more_data) [[likely]] {
@@ -429,7 +429,7 @@ bool SoundManager::interruptSound(const Handle<PlayingSoundCue> & aHandle)
             sound->stagedBuffers.erase(sound->stagedBuffers.begin());
             if (sound->stagedBuffers.size() > 0)
             {
-                alCall(alSourceQueueBuffers, cue->source, sound->stagedBuffers.size(), sound->stagedBuffers.data());
+                alCall(alSourceQueueBuffers, cue->source, (ALsizei)sound->stagedBuffers.size(), sound->stagedBuffers.data());
             }
         }
         else
@@ -567,7 +567,7 @@ Handle<SoundCue> SoundManager::createSoundCue(
         const handy::StringId & aInterruptSoundId
         )
 {
-    std::size_t handleIndex = 0;
+    int handleIndex = 0;
     for (const auto & [handle, cue] : mCues)
     {
         if (cue == nullptr)
@@ -666,7 +666,7 @@ Handle<PlayingSoundCue> SoundManager::playSound(const Handle<SoundCue> & aHandle
     mFreeSources.pop_back();
     ALuint source = mSources.at(sourceIndex);
 
-    std::size_t handleIndex = 0;
+    int handleIndex = 0;
     for (auto & [handle, cue] : mPlayingCues)
     {
         if (cue == nullptr)
@@ -689,7 +689,7 @@ Handle<PlayingSoundCue> SoundManager::playSound(const Handle<SoundCue> & aHandle
     playingCue->state = PlayingSoundCueState_PLAYING;
     sound->state = PlayingSoundState_PLAYING;
     bufferPlayingSound(sound);
-    alCall(alSourceQueueBuffers, playingCue->source, sound->stagedBuffers.size(), sound->stagedBuffers.data());
+    alCall(alSourceQueueBuffers, playingCue->source, (ALsizei)sound->stagedBuffers.size(), sound->stagedBuffers.data());
 
     //empty staged buffers
     sound->stagedBuffers.resize(0);
@@ -743,7 +743,7 @@ void bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSound)
                 freeBuf,
                 SOUNDS_AL_FORMAT[data->vorbisInfo.channels],
                 data->decodedData.data() + aSound->positionInData,
-                sizeof(float) * (nextPositionInData - aSound->positionInData),
+                (ALsizei)(sizeof(float) * (nextPositionInData - aSound->positionInData)),
                 data->vorbisInfo.sample_rate
                 );
 
@@ -849,7 +849,7 @@ void SoundManager::updateCue(PlayingSoundCue & currentCue, const Handle<PlayingS
                 bufferPlayingSound(sound);
             }
 
-            alCall(alSourceQueueBuffers, currentCue.source, sound->stagedBuffers.size(), sound->stagedBuffers.data());
+            alCall(alSourceQueueBuffers, currentCue.source, (ALsizei)sound->stagedBuffers.size(), sound->stagedBuffers.data());
 
             //empty staged buffers
             sound->stagedBuffers.resize(0);
