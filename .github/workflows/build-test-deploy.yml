@@ -8,12 +8,12 @@ on:
 
 jobs:
   build-test-deployrecipe:
-    uses: shredeagle/reusable-workflows/.github/workflows/main_build.yml@v2.3.2
+    uses: shredeagle/reusable-workflows/.github/workflows/main_build.yml@v2.7.0
     with:
       # Disable macOS
       # apple-clang 13 is being a little itch with deduction guides for template aliases.
       os: >-
-        ["ubuntu-20.04", "windows-2022"]
+        ["ubuntu-24.04", "windows-2022"]
       deployrecipe_userchannel: adnn/develop
       step_runtests: false
     secrets:
