@@ -25,7 +25,7 @@ class SoundsConan(ConanFile):
 
     requires = (
         ("spdlog/1.13.0"),
-        ("openal/1.22.2"),
+        ("openal-soft/1.23.1"),
         ("zlib/1.3"),
         ("stb/cci.20230920"),
         ("implot/0.16"),

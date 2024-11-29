@@ -22,10 +22,10 @@ constexpr float MINIMUM_DURATION_BUFFERED_ON_CREATION = 0.2f;
 constexpr float MINIMUM_DURATION_EXTRACTED = 0.5f;
 constexpr float MAXIMUM_DURATION_FOR_NON_STREAM = 5.f;
 constexpr unsigned int SAMPLE_APPROXIMATION = 44100;
-constexpr unsigned int MAX_SAMPLES_FOR_NON_STREAM_DATA = unsigned int(MAXIMUM_DURATION_FOR_NON_STREAM * SAMPLE_APPROXIMATION + 0.5f);
-constexpr unsigned int MINIMUM_SAMPLE_BUFFERED_ON_CREATION = unsigned int(MINIMUM_DURATION_BUFFERED_ON_CREATION * SAMPLE_APPROXIMATION + 0.5f);
-constexpr unsigned int MINIMUM_SAMPLE_EXTRACTED = unsigned int(MINIMUM_DURATION_EXTRACTED * SAMPLE_APPROXIMATION + 0.5f);
-constexpr unsigned int READ_CHUNK_SIZE = unsigned int(16384 * MINIMUM_DURATION_EXTRACTED * 2 + 0.5f);
+constexpr unsigned int MAX_SAMPLES_FOR_NON_STREAM_DATA = (unsigned int)(MAXIMUM_DURATION_FOR_NON_STREAM * SAMPLE_APPROXIMATION + 0.5f);
+constexpr unsigned int MINIMUM_SAMPLE_BUFFERED_ON_CREATION = (unsigned int)(MINIMUM_DURATION_BUFFERED_ON_CREATION * SAMPLE_APPROXIMATION + 0.5f);
+constexpr unsigned int MINIMUM_SAMPLE_EXTRACTED = (unsigned int)(MINIMUM_DURATION_EXTRACTED * SAMPLE_APPROXIMATION + 0.5f);
+constexpr unsigned int READ_CHUNK_SIZE = (unsigned int)(16384 * MINIMUM_DURATION_EXTRACTED * 2 + 0.5f);
 constexpr std::array<ALenum, 3> SOUNDS_AL_FORMAT = {0, AL_FORMAT_MONO_FLOAT32, AL_FORMAT_MONO_FLOAT32};
 
 template<>
@@ -469,6 +469,9 @@ bool SoundManager::stopSound(const Handle<PlayingSoundCue> & aHandle)
         bool result = alCall(alSourceStop, cue->source);
         alCall(alSourcei, cue->source, AL_BUFFER, NULL);
         mPlayingCues.at(aHandle) = nullptr;
+        Handle<SoundCue> soundCue = mCueByPlayingCues.at(aHandle);
+        std::erase(mPlayingCuesByCue.at(soundCue), aHandle);
+
         return result;
     }
 
@@ -702,6 +705,7 @@ Handle<PlayingSoundCue> SoundManager::playSound(const Handle<SoundCue> & aHandle
 
     Handle<PlayingSoundCue> handle{playingCue};
     mPlayingCues.insert_or_assign(handle, std::move(playingCue));
+    mCueByPlayingCues.insert_or_assign(handle, aHandle);
 
     priorityQueue.push_back(handle);
     std::push_heap(priorityQueue.begin(), priorityQueue.end(), CmpHandlePriority);

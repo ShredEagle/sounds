@@ -337,6 +337,7 @@ class SoundManager
         std::map<
             SoundCategory, CategoryOption> mCategoryOptions;
         std::map<Handle<SoundCue>, std::vector<Handle<PlayingSoundCue>>> mPlayingCuesByCue;
+        std::map<Handle<PlayingSoundCue>, Handle<SoundCue>> mCueByPlayingCues;
 
         ALCdevice * mOpenALDevice;
         ALCcontext * mOpenALContext;
