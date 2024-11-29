@@ -20,7 +20,7 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
             ImGui::Text("Sources");
             ImGui::Separator();
             ImGui::Spacing();
-            static ALuint hovered = -1;
+            static int hovered = -1;
 
             // Show Sources
             ImGui::BeginGroup();
@@ -45,7 +45,7 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
                 //ImGui::SetCursorScreenPos(position);
                 if(ImGui::Button(popupName, ImVec2{(float)size, (float)size}))
                 {
-                    hovered = managerInfo.sources[i];
+                    hovered = (int)managerInfo.sources[i];
                 }
                 ImGui::SameLine();
             }
@@ -58,7 +58,7 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
                 const auto & cueIt = std::find_if(managerInfo.playingCues.begin(), managerInfo.playingCues.end(),[](auto & cue){
                     if (cue.second != nullptr)
                     {
-                        return cue.second->source == hovered;
+                        return cue.second->source == (ALuint)hovered;
                     }
 
                     return false;
