@@ -184,7 +184,7 @@ handy::StringId SoundManager::createData(
 
     std::chrono::duration<double> diff = after - now;
 
-    spdlog::get("sounds")->info("Samples: {}, total used bytes: {}, Elapsed time: {}, length decoded: {}", samplesRead, resultSoundData->usedData, diff.count(), resultSoundData->lengthDecoded * resultSoundData->vorbisInfo.channels);
+    spdlog::get("sounds")->debug("Samples: {}, total used bytes: {}, Elapsed time: {}, length decoded: {}", samplesRead, resultSoundData->usedData, diff.count(), resultSoundData->lengthDecoded * resultSoundData->vorbisInfo.channels);
 
     mLoadedSounds.insert({resultSoundData->soundId, resultSoundData});
 
@@ -326,7 +326,7 @@ void decodeSoundData(
             soundData.insert(
                     soundData.end(), moreHeaderData.begin(), moreHeaderData.end());
             std::streamsize lengthRead = inputStream.gcount();
-            spdlog::get("sounds")->info("Reading new chunk from {} to {}", aData->lengthRead, aData->lengthRead + lengthRead);
+            spdlog::get("sounds")->trace("Reading new chunk from {} to {}", aData->lengthRead, aData->lengthRead + lengthRead);
             aData->lengthRead += lengthRead;
 
             if (lengthRead < READ_CHUNK_SIZE)
@@ -350,7 +350,7 @@ void decodeSoundData(
 
     std::chrono::duration<double> diff = after - now;
 
-    spdlog::get("sounds")->info("Samples: {}, total used bytes: {}, Elapsed time: {}, length decoded: {}", samplesRead, aData->usedData, diff.count(), aData->lengthDecoded * aData->vorbisInfo.channels);
+    spdlog::get("sounds")->debug("Samples: {}, total used bytes: {}, Elapsed time: {}, length decoded: {}", samplesRead, aData->usedData, diff.count(), aData->lengthDecoded * aData->vorbisInfo.channels);
 }
 
 
@@ -739,7 +739,7 @@ void bufferPlayingSound(const std::shared_ptr<PlayingSound> & aSound)
             nextPositionInData = data->lengthDecoded;
         }
 
-        spdlog::get("sounds")->info(
+        spdlog::get("sounds")->trace(
                 "buffer: {}, from: {}, size: {}",
                 freeBuf,
                 aSound->positionInData,
