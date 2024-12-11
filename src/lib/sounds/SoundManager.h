@@ -71,7 +71,7 @@ constexpr int MASTER_SOUND_CATEGORY = -1;
 constexpr int HIGHEST_PRIORITY = -1;
 constexpr int BUFFER_PER_CHANNEL = 5 * 5;
 constexpr ALsizei MAX_SOURCES = 16;
-const std::size_t MAX_SOURCE_PER_CUE = 3;
+const std::size_t MAX_SOURCE_PER_CUE = 4;
 
 template<typename T>
 inline std::vector<T> interleave(T * left, T * right, int size)
