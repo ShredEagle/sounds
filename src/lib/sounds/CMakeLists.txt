@@ -1,15 +1,17 @@
 set(TARGET_NAME sounds)
 
 set(${TARGET_NAME}_HEADERS
-    stb_vorbis.h
+    Logging.h
     SoundManager.h
     SoundUtilities.h
+    stb_vorbis.h
 )
 
 set(${TARGET_NAME}_SOURCES
-    stb_vorbis.c
+    Logging.cpp
     SoundManager.cpp
     SoundUtilities.cpp
+    stb_vorbis.c
 )
 
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR}
