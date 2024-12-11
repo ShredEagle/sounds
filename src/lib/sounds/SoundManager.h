@@ -70,7 +70,7 @@ typedef int SoundCategory;
 constexpr int MASTER_SOUND_CATEGORY = -1;
 constexpr int HIGHEST_PRIORITY = -1;
 constexpr int BUFFER_PER_CHANNEL = 5 * 5;
-constexpr ALsizei MAX_SOURCES = 8;
+constexpr ALsizei MAX_SOURCES = 16;
 const std::size_t MAX_SOURCE_PER_CUE = 3;
 
 template<typename T>
