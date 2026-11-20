@@ -2,6 +2,7 @@
 
 #include <imgui.h>
 #include <implot.h>
+#include <string>
 
 namespace ad {
 namespace sounds {
@@ -9,13 +10,19 @@ namespace sounds {
 constexpr int SOURCE_RECT_SIZE = 20;
 constexpr int MAX_SAMPLE_DRAWN = 10000;
 
+void initSoundUi() { ImPlot::CreateContext(); }
+
+void cleanupSoundUi() { ImPlot::DestroyContext(); }
+
 void DisplaySoundUi(const SoundManagerInfo & managerInfo)
 {
     static bool newSelection = false;
     ImGui::SetNextWindowSize(ImVec2(900, 700), ImGuiCond_Once);
     ImGui::Begin("Sound manager info");
-    if (ImGui::BeginTabBar("Sound manager info")) {
-        if (ImGui::BeginTabItem("Playing resources")) {
+    if (ImGui::BeginTabBar("Sound manager info"))
+    {
+        if (ImGui::BeginTabItem("Playing resources"))
+        {
             ImDrawList * drawList = ImGui::GetWindowDrawList();
             ImGui::Text("Sources");
             ImGui::Separator();
@@ -24,28 +31,34 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
 
             // Show Sources
             ImGui::BeginGroup();
-            for (std::size_t i = 0; i < managerInfo.sources.size(); i++) {
+            for (std::size_t i = 0; i < managerInfo.sources.size(); i++)
+            {
                 const ImVec2 p = ImGui::GetCursorScreenPos();
                 int size = SOURCE_RECT_SIZE;
                 float x = p.x;
                 float y = p.y;
 
-                char popupName[32];
+                // char popupName[32];
 
                 if (std::find(managerInfo.freeSources.begin(),
                               managerInfo.freeSources.end(), i)
-                    == managerInfo.freeSources.end()) {
-                    drawList->AddRectFilled(ImVec2(x, y), ImVec2(x + size, y + size),
+                    == managerInfo.freeSources.end())
+                {
+                    drawList->AddRectFilled(ImVec2(x, y),
+                                            ImVec2(x + size, y + size),
                                             ImColor(1.f, 1.f, 0.f, 1.f));
-                } else {
+                }
+                else
+                {
                     drawList->AddRect(ImVec2(x, y), ImVec2(x + size, y + size),
                                       ImColor(1.f, 1.f, 0.f, 1.f));
                 }
 
-                //ImGui::SetCursorScreenPos(position);
-                if(ImGui::Button(popupName, ImVec2{(float)size, (float)size}))
+                // ImGui::SetCursorScreenPos(position);
+                if (ImGui::Button(std::to_string(i).c_str(),
+                                  ImVec2{(float) size, (float) size}))
                 {
-                    hovered = (int)managerInfo.sources[i];
+                    hovered = (int) managerInfo.sources[i];
                 }
                 ImGui::SameLine();
             }
@@ -55,19 +68,23 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
             ImGui::BeginGroup();
             if (hovered != -1)
             {
-                const auto & cueIt = std::find_if(managerInfo.playingCues.begin(), managerInfo.playingCues.end(),[](auto & cue){
-                    if (cue.second != nullptr)
-                    {
-                        return cue.second->source == (ALuint)hovered;
-                    }
+                const auto & cueIt = std::find_if(
+                    managerInfo.playingCues.begin(),
+                    managerInfo.playingCues.end(), [](auto & cue) {
+                        if (cue.second != nullptr)
+                        {
+                            return cue.second->source == (ALuint) hovered;
+                        }
 
-                    return false;
-                });
+                        return false;
+                    });
                 if (cueIt != managerInfo.playingCues.end())
                 {
                     const ad::sounds::PlayingSoundCue & cue = *cueIt->second;
-                    const ad::sounds::PlayingSound * playingSound = cue.getPlayingSound().get();
-                    const ad::sounds::PlayingSound * waitingSound = cue.getWaitingSound().get();
+                    const ad::sounds::PlayingSound * playingSound =
+                        cue.getPlayingSound().get();
+                    const ad::sounds::PlayingSound * waitingSound =
+                        cue.getWaitingSound().get();
 
                     ImGui::Spacing();
                     ImGui::Text("Playing cue info");
@@ -75,21 +92,31 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
                     ImGui::Text("Category: %d", cue.category);
                     ImGui::Text("Gain: %f", cue.option.gain);
                     ImGui::Separator();
-                    ImGui::Text("Currently playing sound: %s", revertStringId(playingSound->soundData->soundId).c_str());
-                    ImGui::Text("Currently waiting sound: %s", revertStringId(waitingSound->soundData->soundId).c_str());
+                    ImGui::Text("Currently playing sound: %s",
+                                revertStringId(playingSound->soundData->soundId)
+                                    .c_str());
+                    ImGui::Text("Currently waiting sound: %s",
+                                revertStringId(waitingSound->soundData->soundId)
+                                    .c_str());
                     ImGui::Spacing();
 
                     ImGui::Text("Sound list");
                     ImGui::Separator();
 
-                    for (const std::shared_ptr<ad::sounds::PlayingSound> & sound : cue.sounds)
+                    for (const std::shared_ptr<ad::sounds::PlayingSound> &
+                             sound : cue.sounds)
                     {
-                        if (ImGui::CollapsingHeader(revertStringId(sound->soundData->soundId).c_str(), ImGuiTreeNodeFlags_None))
+                        if (ImGui::CollapsingHeader(
+                                revertStringId(sound->soundData->soundId)
+                                    .c_str(),
+                                ImGuiTreeNodeFlags_None))
                         {
                             ImGui::Text("Loops %d", sound->loops);
                             ImGui::Text("buffers %zu", sound->buffers.size());
-                            ImGui::Text("stagedBuffers %zu", sound->stagedBuffers.size());
-                            ImGui::Text("freeBuffers %zu", sound->freeBuffers.size());
+                            ImGui::Text("stagedBuffers %zu",
+                                        sound->stagedBuffers.size());
+                            ImGui::Text("freeBuffers %zu",
+                                        sound->freeBuffers.size());
                         }
                     }
                 }
@@ -100,13 +127,16 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
             ImGui::EndTabItem();
         }
         // Show Data
-        if (ImGui::BeginTabItem("Loaded sound data")) {
+        if (ImGui::BeginTabItem("Loaded sound data"))
+        {
             ImGui::BeginChild("sound list", ImVec2(150.f, 0.f), true);
             static ad::handy::StringId selectedSound{
                 managerInfo.loadedSounds.begin()->first};
-            for (auto [stringId, sound] : managerInfo.loadedSounds) {
-                if (ImGui::Selectable(ad::handy::revertStringId(stringId).c_str(),
-                                      selectedSound == stringId)) 
+            for (auto [stringId, sound] : managerInfo.loadedSounds)
+            {
+                if (ImGui::Selectable(
+                        ad::handy::revertStringId(stringId).c_str(),
+                        selectedSound == stringId))
                 {
                     if (selectedSound != stringId)
                     {
@@ -143,47 +173,64 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
 
             ImGui::Text("Raw data info");
             ImGui::Separator();
-            if (sound->decodedData.size() && ImPlot::BeginPlot("Decoded data", ImVec2(-1, 0),
-                                  ImPlotFlags_CanvasOnly)) {
+            if (sound->decodedData.size()
+                && ImPlot::BeginPlot("Decoded data", ImVec2(-1, 0),
+                                     ImPlotFlags_CanvasOnly))
+            {
                 if (!sound->streamedData)
                 {
                     ImPlot::SetupAxes(
-                            NULL, NULL,
-                            newSelection ? ImPlotAxisFlags_AutoFit : 0 | (ImPlotAxisFlags_NoDecorations ^ ImPlotAxisFlags_NoGridLines),
-                            ImPlotAxisFlags_AutoFit | (ImPlotAxisFlags_NoDecorations ^ ImPlotAxisFlags_NoGridLines));
+                        NULL, NULL,
+                        newSelection ? ImPlotAxisFlags_AutoFit
+                                     : 0
+                                           | (ImPlotAxisFlags_NoDecorations
+                                              ^ ImPlotAxisFlags_NoGridLines),
+                        ImPlotAxisFlags_AutoFit
+                            | (ImPlotAxisFlags_NoDecorations
+                               ^ ImPlotAxisFlags_NoGridLines));
                     ImPlot::PlotLine("", sound->decodedData.data(),
-                                     (int)sound->decodedData.size());
+                                     (int) sound->decodedData.size());
                     newSelection = false;
                 }
                 else
                 {
-                    ImPlot::SetupAxes(
-                            NULL, NULL, ImPlotAxisFlags_NoDecorations ^ ImPlotAxisFlags_NoGridLines,  ImPlotAxisFlags_NoDecorations ^ ImPlotAxisFlags_NoGridLines);
+                    ImPlot::SetupAxes(NULL, NULL,
+                                      ImPlotAxisFlags_NoDecorations
+                                          ^ ImPlotAxisFlags_NoGridLines,
+                                      ImPlotAxisFlags_NoDecorations
+                                          ^ ImPlotAxisFlags_NoGridLines);
 
-                    int sampleDrawn = (int)sound->decodedData.size();
-                    int realSampleDrawn = (int)std::min((std::size_t)MAX_SAMPLE_DRAWN, sound->decodedData.size());
-                    sampleDrawn = std::max(0, sampleDrawn - (sampleDrawn % realSampleDrawn));
+                    int sampleDrawn = (int) sound->decodedData.size();
+                    int realSampleDrawn =
+                        (int) std::min((std::size_t) MAX_SAMPLE_DRAWN,
+                                       sound->decodedData.size());
+                    sampleDrawn = std::max(
+                        0, sampleDrawn - (sampleDrawn % realSampleDrawn));
                     int sampleStride = sampleDrawn / realSampleDrawn;
 
-                    float drawnSampleToTotalReadSize = (float)sound->usedData / (float)sound->lengthRead;
-                    float plotLengthOfReadData = (float)realSampleDrawn / drawnSampleToTotalReadSize;
+                    float drawnSampleToTotalReadSize =
+                        (float) sound->usedData / (float) sound->lengthRead;
+                    float plotLengthOfReadData =
+                        (float) realSampleDrawn / drawnSampleToTotalReadSize;
 
-                    ImPlot::SetupAxesLimits(0.f, plotLengthOfReadData, -1.f, 1.f, ImPlotCond_Always);
+                    ImPlot::SetupAxesLimits(0.f, plotLengthOfReadData, -1.f,
+                                            1.f, ImPlotCond_Always);
 
                     ImVec2 rmin = ImPlot::PlotToPixels(ImPlotPoint(0.f, -1.f));
-                    ImVec2 rmax = ImPlot::PlotToPixels(ImPlotPoint(plotLengthOfReadData, 1.f));
+                    ImVec2 rmax = ImPlot::PlotToPixels(
+                        ImPlotPoint(plotLengthOfReadData, 1.f));
                     ImPlot::PushPlotClipRect();
-                    ImPlot::GetPlotDrawList()->AddRectFilled(rmin, rmax, ImColor(1.f, 0.6f, 0.1f, 0.2f));
-                    ImPlot::GetPlotDrawList()->AddRect(rmin, rmax, ImColor(1.f, 0.6f, 0.1f, 0.8f));
+                    ImPlot::GetPlotDrawList()->AddRectFilled(
+                        rmin, rmax, ImColor(1.f, 0.6f, 0.1f, 0.2f));
+                    ImPlot::GetPlotDrawList()->AddRect(
+                        rmin, rmax, ImColor(1.f, 0.6f, 0.1f, 0.8f));
                     ImPlot::PopPlotClipRect();
 
-                    ImPlot::PlotLine("",
-                            sound->decodedData.data(),
-                            realSampleDrawn, 1, 0, 0, sizeof(float) * sampleStride);
-
+                    ImPlot::PlotLine(
+                        "", sound->decodedData.data(), realSampleDrawn, 1, 0,
+                        ImPlotLineFlags_None, 0, sizeof(float) * sampleStride);
 
                     newSelection = false;
-                    
                 }
                 ImPlot::EndPlot();
             }
@@ -193,8 +240,9 @@ void DisplaySoundUi(const SoundManagerInfo & managerInfo)
         }
         ImGui::EndTabBar();
     }
+    (void) newSelection;
     ImGui::End();
 }
 
-}
-}
+} // namespace sounds
+} // namespace ad
